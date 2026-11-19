@@ -7,7 +7,8 @@ const PALETTES = {
   bone: ["#2b211b", "#5c4a3b", "#8e7860", "#bca98a", "#e0d4b8", "#faf4e3"],
   disc: ["#2b211b", "#4b5157", "#7b878a", "#a7b2b0", "#cdd6d1", "#eef3ee"],
 };
-const STYLE = { lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, gap: 3, thresholds: [0.22, 0.45, 0.70, 0.92] };
+const STYLE = { lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, gap: 3, thresholds: [0.22, 0.45, 0.70, 0.92],
+  outline: true, lines: true, rim: true, clusters: true };
 
 function rotView(yaw, pitch) {
   const a = (yaw * Math.PI) / 180, b = (pitch * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
@@ -81,7 +82,8 @@ function cast(model, view, onProgress, only) {
 }
 
 // labels: 0 empty, 1 outline, 2 line, 3 shade, 4 mid, 5 light, 6 hi ; per pixel also obj (element index+1) and part
-function stylise(g, model, st = STYLE) {
+function stylise(g, model, st0) {
+  const st = Object.assign({}, STYLE, st0 || {});
   const { W, H, ss } = g, SW = W * ss, n = W * H;
   const th = (st.lightDir * Math.PI) / 180, ph = (st.lightFront * Math.PI) / 180;
   const L = [Math.cos(ph) * Math.cos(th), Math.cos(ph) * Math.sin(th), Math.sin(ph)];
@@ -110,7 +112,7 @@ function stylise(g, model, st = STYLE) {
   }
   const at = (arr, x, y, def) => (x < 0 || y < 0 || x >= W || y >= H ? def : arr[y * W + x]);
   // clusters: 3x3 majority (same element only), then remove lone pixels
-  for (let it = 0; it < 3; it++) {
+  for (let it = 0; it < (st.clusters ? 3 : 0); it++) {
     const out = tone.slice();
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const p = y * W + x, t = tone[p]; if (t < 0) continue;
@@ -136,13 +138,13 @@ function stylise(g, model, st = STYLE) {
       if (!at(cover, x + dx, y + dy, 0)) edge = true;
       else if (at(depth, x + dx, y + dy, 0) - depth[p] > st.gap) inner = true;
     }
-    if (edge) lab[p] = 1; else if (inner) lab[p] = tone[p] >= 1 ? 2 : 1;
+    if (edge && st.outline) lab[p] = 1; else if (inner && st.lines) lab[p] = tone[p] >= 1 ? 2 : 1;
   }
   // foramen walls read as holes: darkest tone
   for (let p = 0; p < n; p++) if (lab[p] >= 2 && partOf[p] === 19) lab[p] = 2;
   // rim light on top edges, step down above bottom edges
   const isEdge = (x, y) => { const v = at(lab, x, y, 0); return v === 1 || v === 0; };
-  { const out = lab.slice();
+  if (st.rim) { const out = lab.slice();
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
       const p = y * W + x, v = lab[p]; if (v < 2) continue; const ti = v - 2;
       if (isEdge(x, y - 1) && lab[p - 1] !== 0 && (ti === 1 || ti === 2)) out[p] = v + 1;
@@ -150,7 +152,7 @@ function stylise(g, model, st = STYLE) {
     }
     lab = out; }
   // interior lines are strokes, never dots
-  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+  if (st.lines) for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
     const p = y * W + x; if (lab[p] !== 2) continue; let ok = false;
     for (let dy = -1; dy <= 1 && !ok; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const v = lab[p + dy * W + dx]; if (v === 1 || v === 2) { ok = true; break; } }
     if (!ok) lab[p] = Math.max(1, tone[p]) + 2;

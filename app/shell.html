@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pixel Character Lab</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one environment for every build level. Level stepper on top, controls rail on the left,
+   the square pixel frame on the right, status bar below. Single dark world: sprites are judged on a neutral workspace. */
+:root {
+  --bg: #15181c; --panel: #1d2126; --raise: #272c33; --line: #333941;
+  --ink: #e7e2d6; --muted: #8f969e; --accent: #7cc4d8; --accent-ink: #0e1a1f;
+  --f-display: "Pixelify Sans", "Courier New", monospace;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 13px; line-height: 1.4; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+
+.app { height: 100%; display: grid; grid-template-columns: 296px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
+header { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+h1 { font-family: var(--f-display); font-size: 22px; font-weight: 600; margin: 0; }
+header small { color: var(--muted); }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+
+/* level stepper */
+.levels { grid-column: 1 / -1; display: flex; gap: 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
+.levels button { display: grid; gap: 1px; text-align: left; border: 0; border-right: 1px solid var(--line); background: transparent; padding: 9px 18px 8px; cursor: pointer; min-width: 150px; position: relative; }
+.levels button b { font-family: var(--f-display); font-weight: 500; font-size: 15px; }
+.levels button span { color: var(--muted); font-size: 12px; }
+.levels button[aria-pressed="true"] { background: var(--panel); }
+.levels button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
+.levels button:disabled { cursor: default; opacity: 0.45; }
+
+.rail { grid-row: 3 / 5; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding-bottom: 18px; }
+.group { padding: 12px 16px; display: grid; gap: 9px; border-bottom: 1px solid var(--line); }
+.group h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
+.group h2 span { text-transform: none; letter-spacing: 0; font-weight: 400; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1 1 auto; border: 0; background: transparent; padding: 5px 7px; cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button:hover { background: var(--raise); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.chips button { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 4px; cursor: pointer; font-size: 12px; }
+.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.chips button:disabled { opacity: 0.35; cursor: default; }
+.bones { grid-template-columns: repeat(6, 1fr); }
+.bones button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
+.range { display: grid; grid-template-columns: 96px minmax(0, 1fr) 54px; align-items: center; gap: 8px; }
+.range label { color: var(--muted); }
+.range output { font-family: var(--f-mono); font-size: 12px; text-align: right; }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+input[type="range"]:disabled { opacity: 0.4; }
+.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.check input { accent-color: var(--accent); margin: 0; }
+select { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.pal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.pal label { display: grid; gap: 2px; justify-items: center; font-size: 10px; color: var(--muted); cursor: pointer; }
+.pal input { width: 100%; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
+.legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; color: var(--muted); font-size: 12px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.legend[hidden] { display: none; }
+[data-level="1"] .only2, [data-level="2"] .only1 { display: none; }
+
+#stage { position: relative; overflow: auto; padding: 20px; min-height: 0; }
+.frame { position: relative; display: inline-block; border: 1px solid var(--line); }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+#lbl-layer { position: absolute; inset: 0; pointer-events: none; }
+.lbl { position: absolute; font-family: var(--f-mono); font-size: 11px; color: var(--muted); transform: translateY(-50%); white-space: nowrap; }
+.lbl.l { transform: translate(-100%, -50%); }
+#caption { color: var(--muted); font-size: 12px; margin-top: 8px; }
+#busy { position: absolute; top: 12px; right: 16px; background: var(--raise); border: 1px solid var(--line); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--accent); }
+#toast { position: fixed; bottom: 46px; right: 18px; background: var(--raise); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 6px; }
+.statusbar { border-top: 1px solid var(--line); background: var(--panel); padding: 7px 16px; min-height: 34px; }
+#status { font-family: var(--f-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
+@media (max-width: 800px) {
+  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(70vh, 1fr) auto; height: auto; min-height: 100%; }
+  .rail { grid-row: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+}
+</style>
+</head>
+<body>
+<div class="app" id="app" data-level="1">
+  <header>
+    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm · one 3D model per level, rendered to pixel art in the browser</small>
+    <div class="spacer"></div>
+    <button class="btn" type="button" id="save">Save PNG</button>
+    <button class="btn" type="button" id="copy">Copy style JSON</button>
+  </header>
+  <nav class="levels" id="levels" aria-label="Build level"></nav>
+
+  <aside class="rail" aria-label="Controls">
+    <section class="group only1">
+      <h2>Bone <span id="bone-name"></span></h2>
+      <div class="chips bones" id="bones" role="group" aria-label="Bone"></div>
+      <p class="hint">Any single element of the column, in its own upright frame. L3 is the approved style study.</p>
+    </section>
+    <section class="group">
+      <h2>Camera angle</h2>
+      <div class="chips" id="views" role="group" aria-label="View"></div>
+      <p class="hint">Fixed eye-level angles about one pivot: a point keeps the same screen height in every view.</p>
+    </section>
+    <section class="group">
+      <h2>Pixel scale <span>mm per pixel</span></h2>
+      <div class="seg" id="mm" role="group" aria-label="Millimetres per pixel"></div>
+      <h2>Zoom</h2>
+      <div class="seg" id="zoom" role="group" aria-label="Zoom"></div>
+      <h2>Background</h2>
+      <div class="seg" id="bg" role="group" aria-label="Background"></div>
+    </section>
+    <section class="group">
+      <h2>Overlays</h2>
+      <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
+      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Vertebra labels</label>
+      <div class="seg" id="colorby" role="group" aria-label="Colour by"></div>
+      <div class="legend" id="legend" hidden></div>
+    </section>
+    <section class="group">
+      <h2>Light</h2>
+      <div class="range"><label for="lightDir">Direction</label><input type="range" id="lightDir" min="0" max="355" step="1"><output id="lightDir-out"></output></div>
+      <div class="range"><label for="lightFront">Toward viewer</label><input type="range" id="lightFront" min="0" max="85" step="1"><output id="lightFront-out"></output></div>
+      <div class="range"><label for="ambient">Ambient</label><input type="range" id="ambient" min="0" max="0.5" step="0.01"><output id="ambient-out"></output></div>
+      <div class="range"><label for="aoStr">Crevice shadow</label><input type="range" id="aoStr" min="0" max="1.5" step="0.05"><output id="aoStr-out"></output></div>
+      <div class="range"><label for="exposure">Exposure</label><input type="range" id="exposure" min="0.6" max="1.5" step="0.01"><output id="exposure-out"></output></div>
+    </section>
+    <section class="group">
+      <h2>Pixel rules</h2>
+      <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
+      <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
+      <div class="range"><label for="gap">Depth jump</label><input type="range" id="gap" min="1" max="10" step="0.5"><output id="gap-out"></output></div>
+      <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
+      <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
+    </section>
+    <section class="group">
+      <h2>Palette</h2>
+      <label class="range" for="preset" style="grid-template-columns:96px 1fr"><span style="color:var(--muted)">Bone preset</span><select id="preset"></select></label>
+      <div class="pal" id="pal-bone" aria-label="Bone colours"></div>
+      <h2>Disc colours</h2>
+      <div class="pal" id="pal-disc" aria-label="Disc colours"></div>
+      <button class="btn" type="button" id="reset">Reset all settings</button>
+    </section>
+  </aside>
+
+  <main id="stage"><div id="busy" hidden></div>
+    <div class="frame"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
+    <div id="caption"></div>
+  </main>
+  <div class="statusbar"><div id="status"></div></div>
+</div>
+<div id="toast" role="status" hidden></div>
+<script id="core-src">
+/*CORE*/
+</script>
+<script id="render-src">
+/*RENDER*/
+</script>
+<script>
+/*APP*/
+</script>
+</body>
+</html>
