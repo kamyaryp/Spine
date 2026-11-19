@@ -45,19 +45,28 @@ function boneModel(id) {
   const span = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
   return { els: [el], comps: [comp], frameMM: Math.max(96, Math.ceil((span * 1.12) / 8) * 8), pivot: [0, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2] };
 }
-const modelFor = (level, bone) => (level === 1 ? boneModel(bone) : { ...full, frameMM: R.FRAME.W * R.FRAME.mm, pivot: R.FRAME.pivot });
-let model = modelFor(S.level, S.bone);
+const RIG = window.SpineRig, ROM = window.SpineROM, rig = RIG.makeRig(built);
+const poseKey = (p) => JSON.stringify(p || RIG.ZERO());
+const posedCache = new Map();
+function posed(pose) {
+  const k = poseKey(pose); if (posedCache.has(k)) return posedCache.get(k);
+  const m = RIG.posedModel(rig, full.comps, pose); posedCache.set(k, m); if (posedCache.size > 24) posedCache.delete(posedCache.keys().next().value); return m;
+}
+const modelFor = (level, bone, pose) => (level === 1 ? boneModel(bone) : { ...posed(pose), frameMM: R.FRAME.W * R.FRAME.mm, pivot: R.FRAME.pivot });
+if (!S.pose || !S.pose.root) S.pose = RIG.ZERO();
+let model = modelFor(S.level, S.bone, S.pose);
 function viewSpec(m, v, mm) { const W = Math.round(m.frameMM / mm); return { yaw: v.yaw, pitch: v.pitch || 0, mm, W, H: W, pivot: m.pivot, ss: S.level === 1 ? 4 : 3 }; }
 
 // ---------- workers ----------
-const SRC = $("core-src").textContent + "\n" + $("render-src").textContent + `
+const SRC = $("core-src").textContent + "\n" + $("rom-src").textContent + "\n" + $("rig-src").textContent + "\n" + $("render-src").textContent + `
   let FULL = null; const BONE = {};
-  function full() { if (!FULL) { const b = SpineCore.build(); FULL = { els: b.els, comps: b.els.map(SpineCore.compile) }; } return FULL; }
+  let RIGW = null;
+  function full() { if (!FULL) { const b = SpineCore.build(); FULL = { els: b.els, comps: b.els.map(SpineCore.compile) }; RIGW = SpineRig.makeRig(b); } return FULL; }
   function bone(id) { if (!BONE[id]) { const F = full(), k = F.els.findIndex((e) => e.id === id); BONE[id] = { els: [{ ...F.els[k], o: [0, 0, 0], psi: 0 }], comps: [F.comps[k]] }; } return BONE[id]; }
   self.onmessage = (ev) => {
-    const q = ev.data, M = q.level === 1 ? bone(q.bone) : full();
+    const q = ev.data, M = q.level === 1 ? bone(q.bone) : (full(), SpineRig.posedModel(RIGW, FULL.comps, q.pose));
     const g = SpineRender.cast(M, q.view, (p) => self.postMessage({ id: q.id, progress: p }), q.only);
-    self.postMessage({ id: q.id, g }, [g.depth.buffer, g.nx.buffer, g.ny.buffer, g.nz.buffer, g.ao.buffer, g.part.buffer, g.obj.buffer]);
+    self.postMessage({ id: q.id, g }, [g.idx.buffer, g.depth.buffer, g.nx.buffer, g.ny.buffer, g.nz.buffer, g.ao.buffer, g.part.buffer, g.obj.buffer]);
   };`;
 let workers = [];
 try { const url = URL.createObjectURL(new Blob([SRC], { type: "text/javascript" })); const n = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1)); for (let i = 0; i < n; i++) workers.push(new Worker(url)); }
@@ -67,21 +76,22 @@ const shares = Array.from({ length: Math.max(1, workers.length) }, () => ({ k: [
 cost.map((c, k) => [c, k]).sort((a, b) => b[0] - a[0]).forEach(([c, k]) => { const s = shares.reduce((a, b) => (a.c <= b.c ? a : b)); s.k.push(k); s.c += c; });
 
 const cache = new Map(); let jobId = 0;
-function geometry(level, bone, viewId, mm, onProgress) {
-  const key = `${level}|${level === 1 ? bone : ""}|${viewId}|${mm}`;
+function geometry(level, bone, viewId, mm, onProgress, pose) {
+  pose = pose || S.pose;
+  const key = `${level}|${level === 1 ? bone : poseKey(pose)}|${viewId}|${mm}`;
   if (cache.has(key)) return Promise.resolve(cache.get(key));
-  const m = modelFor(level, bone), v = VIEWS.find((x) => x.id === viewId), view = viewSpec(m, v, mm);
+  const m = modelFor(level, bone, pose), v = VIEWS.find((x) => x.id === viewId), view = viewSpec(m, v, mm);
   if (!workers.length) return new Promise((res) => setTimeout(() => { const g = R.cast(m, view); cache.set(key, g); res(g); }, 10));
   const id = ++jobId;
   const jobs = level === 1 ? [{ w: workers[0], only: null }] : workers.map((w, i) => ({ w, only: shares[i].k }));
   const prog = jobs.map(() => 0);
   return Promise.all(jobs.map((j, i) => new Promise((res) => {
     const h = (ev) => { if (ev.data.id !== id) return; if (ev.data.g) { j.w.removeEventListener("message", h); res(ev.data.g); } else { prog[i] = ev.data.progress; onProgress && onProgress(prog.reduce((a, b) => a + b, 0) / prog.length); } };
-    j.w.addEventListener("message", h); j.w.postMessage({ id, level, bone, view, only: j.only });
+    j.w.addEventListener("message", h); j.w.postMessage({ id, level, bone, view, only: j.only, pose });
   }))).then((parts) => {
-    const g = parts[0];
-    for (let p = 1; p < parts.length; p++) { const o = parts[p]; for (let i = 0; i < g.depth.length; i++) if (o.depth[i] < g.depth[i]) { g.depth[i] = o.depth[i]; g.nx[i] = o.nx[i]; g.ny[i] = o.ny[i]; g.nz[i] = o.nz[i]; g.ao[i] = o.ao[i]; g.part[i] = o.part[i]; g.obj[i] = o.obj[i]; } }
-    cache.set(key, g); return g;
+    const g = R.merge(parts);
+    cache.set(key, g); if (cache.size > 40) cache.delete(cache.keys().next().value);
+    return g;
   });
 }
 
@@ -141,7 +151,7 @@ let restyleT = 0;
 function restyle() { cancelAnimationFrame(restyleT); restyleT = requestAnimationFrame(() => { if (!geo) return; st = R.stylise(geo, model, styleOf()); draw(); }); }
 let token = 0;
 async function render() {
-  model = modelFor(S.level, S.bone);
+  model = modelFor(S.level, S.bone, S.pose); stopPlay();
   save(); sync();
   const t = ++token; $("busy").hidden = false; $("busy").textContent = "Rendering…";
   const g = await geometry(S.level, S.bone, S.view, S.mm, (p) => { if (t === token) $("busy").textContent = `Rendering… ${Math.round(p * 100)}%`; });
@@ -151,7 +161,7 @@ async function render() {
   const what = S.level === 1 ? (model.els[0].name || S.bone) : "Spinal column";
   $("caption").textContent = `${what} · ${v.name}${v.pitch ? " (reference)" : ", eye level"} · ${st.W} × ${st.H} px frame at ${S.mm} mm/px · ${zoomFor()}×`;
   draw();
-  if (S.level === 2) setTimeout(() => R.VIEWS.forEach((x) => geometry(2, "", x.id, S.mm)), 400);   // warm the other spine views
+  updatePoseUI();
 }
 
 // ---------- hover ----------
@@ -255,6 +265,76 @@ $("save").addEventListener("click", async () => {
   const name = `${S.level === 1 ? "vertebra_" + S.bone : "spine"}_${S.view}_${S.mm}mm.png`;
   if (downloads) { try { await downloads.save({ filename: name, data: blob }); flash("Saved " + name); } catch (e) { if (e && e.code === "declined") flash("Save cancelled."); } }
   else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); flash("Downloaded " + name); }
+});
+// ---------- pose: regional controls, demonstrations, playback ----------
+const DEMOS = RIG.demoPoses();
+const AXES = [["fe", "Flex · Ext", (l) => [-l.ext, l.flex]], ["lb", "Bend L · R", (l) => [-l.lb, l.lb]], ["ar", "Rotate L · R", (l) => [-l.ar, l.ar]]];
+const RNAME = { cervical: "Cervical (C1–T1)", thoracic: "Thoracic (T1–L1)", lumbar: "Lumbar (L1–S1)" };
+const ps = $("pose-sliders");
+for (const r of ROM.REGIONS) {
+  const l = RIG.regionLimits(r), h = document.createElement("div");
+  h.className = "region-h"; h.innerHTML = `${RNAME[r]}<span id="env-${r}"></span>`; ps.appendChild(h);
+  for (const [ax, label, rng] of AXES) {
+    const [lo, hi] = rng(l), row = document.createElement("div"); row.className = "range pose";
+    row.innerHTML = `<label for="p-${r}-${ax}">${label}</label><input type="range" id="p-${r}-${ax}" min="${lo.toFixed(1)}" max="${hi.toFixed(1)}" step="0.5"><output id="p-${r}-${ax}-out"></output>`;
+    ps.appendChild(row);
+    // sliders read left = extension / right bend / right rotation; the rig's sign is + flexion, + left
+    row.querySelector("input").addEventListener("input", (e) => { const v = +e.target.value; S.pose[r][ax] = ax === "fe" ? v : -v; onPose(); });
+  }
+}
+const ROOT = [["tilt", "Pelvic tilt", ROM.SETTINGS.root.tilt], ["obliquity", "Obliquity", ROM.SETTINGS.root.obliquity], ["rotation", "Rotation", ROM.SETTINGS.root.rotation]];
+for (const [ax, label, lim] of ROOT) {
+  const row = document.createElement("div"); row.className = "range pose";
+  row.innerHTML = `<label for="p-root-${ax}">${label}</label><input type="range" id="p-root-${ax}" min="${-lim}" max="${lim}" step="0.5"><output id="p-root-${ax}-out"></output>`;
+  $("root-sliders").appendChild(row);
+  row.querySelector("input").addEventListener("input", (e) => { S.pose.root[ax] = +e.target.value; onPose(); });
+}
+if (S.sacrumFixed === undefined) S.sacrumFixed = true;
+$("sacrum-fixed").addEventListener("change", (e) => { S.sacrumFixed = e.target.checked; if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 }; onPose(); });
+DEMOS.forEach((d) => {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = d.name; b.dataset.val = d.id;
+  b.addEventListener("click", () => { S.pose = JSON.parse(JSON.stringify(d.pose)); onPose(true); });
+  $("demos").appendChild(b);
+});
+$("to-neutral").addEventListener("click", () => { S.pose = RIG.ZERO(); onPose(true); });
+let poseT = 0;
+function onPose(now) { stopPlay(); updatePoseUI(); save(); clearTimeout(poseT); poseT = setTimeout(render, now ? 0 : 350); }
+const fmt = (v) => (v > 0 ? "+" : "") + v.toFixed(1) + "°";
+function updatePoseUI() {
+  if (S.level !== 2) return;
+  const sol = RIG.solve(S.pose);
+  for (const r of ROM.REGIONS) {
+    for (const [ax] of AXES) { const v = S.pose[r][ax], shown = ax === "fe" ? v : -v; $(`p-${r}-${ax}`).value = shown; $(`p-${r}-${ax}-out`).textContent = fmt(v); }
+    const e = sol.regions[r].envelope; $(`env-${r}`).textContent = e ? `${Math.round(Math.min(1, e) * 100)} % of envelope${sol.regions[r].scaled ? " (scaled)" : ""}` : "";
+  }
+  for (const [ax] of ROOT) { $(`p-root-${ax}`).value = S.pose.root[ax]; $(`p-root-${ax}-out`).textContent = fmt(S.pose.root[ax]); $(`p-root-${ax}`).disabled = S.sacrumFixed; }
+  $("sacrum-fixed").checked = S.sacrumFixed;
+  const d = DEMOS.find((x) => JSON.stringify(x.pose) === JSON.stringify(S.pose));
+  $("pose-state").textContent = RIG.isZero(S.pose) ? "neutral" : d ? d.name.toLowerCase() : "custom";
+  $("demos").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(!!d && b.dataset.val === d.id)));
+  // per-segment readout: angle and share of that segment's cap
+  const rows = ROM.SEGMENTS.map((s) => { const a = sol.segments[s.id], c = Math.max(Math.abs(a.fe) / (a.fe >= 0 ? s.cap.flex : s.cap.ext), Math.abs(a.lb) / s.cap.lb, Math.abs(a.ar) / s.cap.ar);
+    return `<tr><td>${s.id}</td><td>${a.fe.toFixed(1)}</td><td>${a.lb.toFixed(1)}</td><td>${a.ar.toFixed(1)}</td><td class="bar">${Math.round(c * 100)}%</td></tr>`; }).join("");
+  $("seg-table").innerHTML = `<table><tr><th>Segment</th><th>Flex</th><th>Bend L</th><th>Rot L</th><th>of cap</th></tr>${rows}</table>`;
+  $("play").disabled = RIG.isZero(S.pose);
+}
+// playback: neutral -> pose -> neutral, eased (in-out sine, as in pixelfx); five unique poses rendered once, then reused
+const FRACS = [0, 0.1464, 0.5, 0.8536, 1], SEQ = [0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 0, 0];
+let playT = 0, playing = false;
+function stopPlay() { if (playT) clearInterval(playT); playT = 0; if (playing) { playing = false; $("play").textContent = "Play"; } }
+$("play").addEventListener("click", async () => {
+  if (playing) { stopPlay(); render(); return; }
+  playing = true; $("play").textContent = "Stop";
+  const target = JSON.parse(JSON.stringify(S.pose)), view = S.view, mmv = S.mm, frames = [];
+  for (let i = 0; i < FRACS.length; i++) {
+    if (!playing) return;
+    $("busy").hidden = false; $("busy").textContent = `Preparing playback ${i + 1}/${FRACS.length}…`;
+    const p = RIG.scalePose(target, FRACS[i]), g = await geometry(2, "", view, mmv, null, p), m = modelFor(2, "", p);
+    frames.push({ st: R.stylise(g, m, styleOf()), m });
+  }
+  $("busy").hidden = true; if (!playing) return;
+  let k = 0;
+  playT = setInterval(() => { const f = frames[SEQ[k % SEQ.length]]; st = f.st; model = f.m; draw(); k++; }, 110);
 });
 render();
 })();

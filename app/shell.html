@@ -74,6 +74,18 @@ select { background: var(--raise); border: 1px solid var(--line); border-radius:
 .legend[hidden] { display: none; }
 [data-level="1"] .only2, [data-level="2"] .only1 { display: none; }
 
+.row { display: flex; gap: 6px; flex-wrap: wrap; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.region-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-top: 4px; }
+.region-h span { font-weight: 400; color: var(--muted); font-family: var(--f-mono); }
+.range.pose { grid-template-columns: 74px minmax(0, 1fr) 54px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+#seg-table { max-height: 260px; overflow: auto; margin-top: 6px; }
+#seg-table table { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
+#seg-table td, #seg-table th { padding: 1px 4px; text-align: right; border-bottom: 1px solid var(--line); }
+#seg-table th { color: var(--muted); font-weight: 500; }
+#seg-table td:first-child, #seg-table th:first-child { text-align: left; }
+#seg-table .bar { color: var(--accent); }
 #stage { position: relative; overflow: auto; padding: 20px; min-height: 0; }
 .frame { position: relative; display: inline-block; border: 1px solid var(--line); }
 canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
@@ -102,6 +114,16 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
   <nav class="levels" id="levels" aria-label="Build level"></nav>
 
   <aside class="rail" aria-label="Controls">
+    <section class="group only2" id="pose-group">
+      <h2>Pose <span id="pose-state">neutral</span></h2>
+      <div class="chips" id="demos" role="group" aria-label="Demonstration poses"></div>
+      <div class="row"><button class="btn primary" type="button" id="play">Play</button><button class="btn" type="button" id="to-neutral">Reset to neutral</button></div>
+      <div id="pose-sliders"></div>
+      <label class="check" for="sacrum-fixed"><input type="checkbox" id="sacrum-fixed"> Sacrum fixed (isolated spine)</label>
+      <div id="root-sliders"></div>
+      <details id="seg-details"><summary>Segment angles</summary><div id="seg-table"></div></details>
+      <p class="hint">Regional controls are spread over the motion segments by their measured share. Limits: 85 % of mean active ranges; combined motions share one envelope.</p>
+    </section>
     <section class="group only1">
       <h2>Bone <span id="bone-name"></span></h2>
       <div class="chips bones" id="bones" role="group" aria-label="Bone"></div>
@@ -162,6 +184,12 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 <div id="toast" role="status" hidden></div>
 <script id="core-src">
 /*CORE*/
+</script>
+<script id="rom-src">
+/*ROM*/
+</script>
+<script id="rig-src">
+/*RIG*/
 </script>
 <script id="render-src">
 /*RENDER*/

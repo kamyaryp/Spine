@@ -10,7 +10,7 @@ camera angles and joint positions stay consistent from level to level.
 | Level | Status | What it shows |
 |---|---|---|
 | 1 · Vertebra | done | Any single bone of the column in its own upright frame (L3 is the approved style study), with a top view for reference |
-| 2 · Spine | done, awaiting review | C1–C7, T1–T12, L1–L5, sacrum, coccyx and the 23 discs (C2–C3 … L5–S1), assembled in neutral standing posture |
+| 2 · Spine | approved; rig awaiting review | C1–C7, T1–T12, L1–L5, sacrum, coccyx and the 23 discs, in neutral standing posture, with a working spinal rig (regional pose controls, demonstrations, playback) |
 | 3 · Skeleton | next | skull, rib cage, pelvis, limbs on the same rig |
 | 4 · Body | later | muscle and soft tissue around the skeleton (weight is accounted for here) |
 | 5 · Clothing | later | close-fitting garments following the body |
@@ -28,6 +28,24 @@ The repository is code only: every image is generated.
 - Posture: sacral slope 41°, lumbar lordosis ≈ 57°, thoracic kyphosis T4–T12 ≈ 36°, cervical lordosis ≈ 18°, C7 plumb line 20 mm in front of S1. Body and disc heights are calibrated to whole-figure landmarks (hip, iliac crest at L4–L5, cervicale at C7, room for the skull).
 - Rig: each element has a stable ID (`C1` … `L5`, `S`, `Co`, `D_C2_C3` … `D_L5_S1`) and a local frame (origin at the body centre, y along the body axis). The sacrum is the root; 24 motion segments carry pivots and ranges of motion (White & Panjabi). Discs deform between their end plates.
 
+## Spinal rig (level 2)
+
+The approved neutral column is the rest pose; posing never edits the anatomy, it only produces new transforms for the same shapes.
+
+- **Controls:** flexion/extension, left/right bending and left/right rotation for the cervical (C1–T1), thoracic (T1–L1) and lumbar (L1–S1) regions, plus a whole-sacrum root control (pelvic tilt, obliquity, rotation about the hip axis) that is off by default so the sacrum stays fixed.
+- **Distribution:** each regional angle is spread over its motion segments in proportion to their measured share; no joint ever takes a region's range. C1–C2 is handled separately (rotation about the dens; bending about the loaded lateral mass).
+- **Limits:** active, physiological, in vivo ranges from neutral to one side (`src/spine-rom.js`, with sources and approximations per segment). Controls reach 85 % of the mean; combined motions share one ellipsoidal envelope so all axes cannot peak together; every segment is capped.
+- **Coupling:** cervical bending ↔ same-side rotation (opposite at C1–C2), thoracic bending → same-side rotation, lumbar rotation → opposite bending (same side at L5–S1), as reported in vivo.
+- **Articulation:** rigid vertebrae rotate about anatomically placed centres (within the caudal body in the neck, disc centre in the thorax, posterior half of the disc in the lumbar spine). Discs stay attached: each end plate follows its own vertebra and the disc deforms between them.
+- **Neutral:** zero input returns the rest model itself; the rig is stateless, so there is no drift.
+- **Views:** one pose drives all eight views; the spine frame is 1040 × 1040 px at 1 mm/px in every pose.
+
+| Command | Output |
+|---|---|
+| `node tools/rig-report.js out/rig --render 0/1` | every demonstration pose in all eight views |
+| `node tools/rig-report.js out/rig --report` | limits table and checks: limits, distribution, discs, contacts, view consistency, neutral restoration |
+| `node tools/rig-frames.js out/rig` | eased playback frames for each demonstration |
+
 ## Pixel style
 
 One model, every view: each bone is a signed distance field in millimetres, projected orthographically. Light is fixed to the
@@ -44,6 +62,8 @@ depth jumps more than 3 mm (never single dots), rim light on top edges, darkest 
 | Path | What it is |
 |---|---|
 | `src/spine-core.js` | anatomy data, assembly (rig) and the shapes of every element |
+| `src/spine-rom.js` | movement limits, distribution, coupling and references (one place to review and adjust) |
+| `src/spine-rig.js` | the rig: pose → segment angles → rigid vertebrae and deforming discs |
 | `src/spine-render.js` | ray caster and the pixel-art pass |
 | `src/measure.js` | landmark measurements from the model |
 | `app/` | the lab's page (`shell.html`) and interface (`app.js`) |
@@ -54,7 +74,7 @@ depth jumps more than 3 mm (never single dots), rim light on top edges, darkest 
 | `node tools/build.js` | rebuilds `index.html` |
 | `node tools/render-views.js out 4` | the eight spine views as transparent PNGs in `out/` |
 | `node tools/validate.js out` | validation report: counts, curves, balance, lengths, contacts, view consistency |
-| `node tools/export-rig.js out/spine-rig.json` | element frames, motion segments, pivots and ranges of motion |
+| `node tools/export-rig.js out/spine-rig.json` | element frames, motion segments, pivots, limits, coupling and demo poses |
 
 ## Credits
 

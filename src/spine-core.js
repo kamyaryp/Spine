@@ -154,7 +154,8 @@ function cyl(c, a, r, hl, part = 19, g = 2) {
 function prism(o) {
   const rx = o.W / 2, rz = o.D / 2, tw = Math.tan((o.w || 0) * DEG / 2), hh = o.hc / 2;
   const back = o.back || 0, heart = o.heart || 0, cup = o.cup || 0, bulge = o.bulge || 0;
-  const pad = [rx + bulge + 1, hh + Math.abs(tw) * rz + 1, rz + bulge + 1];
+  const aff = o.aff, extra = aff ? 4 : 0;          // aff: posed disc -> rest frames of the upper / lower end plates
+  const pad = [rx + bulge + 1 + extra, hh + Math.abs(tw) * rz + 1 + extra, rz + bulge + 1 + extra];
   return { part: o.part, g: o.g != null ? o.g : 0, box: [-pad[0], -pad[1], -pad[2], pad[0], pad[1], pad[2]], d(x, y, z) {
     const yt = hh + z * tw, yb = -hh - z * tw;       // top / bottom planes (wedge)
     const ym = (yt + yb) / 2, yh = (yt - yb) / 2;
@@ -162,7 +163,12 @@ function prism(o) {
     const kx = rx * s * (1 - heart * Math.max(0, z / rz) ** 2 * 0.35), kz = rz * s;
     let d = (Math.hypot(x / kx, z / kz) - 1) * Math.min(kx, kz);
     if (back > 0) d = Math.max(d, (-rz + back * (1 - (x / (rx * 0.85)) ** 2)) - z);
-    d = Math.max(d, Math.abs(y - ym) - yh);
+    if (aff) {
+      const U = aff.up, Lo = aff.lo;
+      const uy = U[3] * x + U[4] * y + U[5] * z + U[10], uz = U[6] * x + U[7] * y + U[8] * z + U[11];
+      const ly = Lo[3] * x + Lo[4] * y + Lo[5] * z + Lo[10], lz = Lo[6] * x + Lo[7] * y + Lo[8] * z + Lo[11];
+      d = Math.max(d, uy - (hh + uz * tw), (-hh - lz * tw) - ly);   // the disc follows both end plates
+    } else d = Math.max(d, Math.abs(y - ym) - yh);
     if (cup > 0) {
       const c1 = ellD(x, y, z, 0, yt + cup * 0.75, 0, rx * 0.72, cup * 1.4, rz * 0.68);
       const c2 = ellD(x, y, z, 0, yb - cup * 0.75, 0, rx * 0.72, cup * 1.4, rz * 0.68);
@@ -344,7 +350,7 @@ function atlas(a) {
 }
 
 function disc(o) {
-  return { prims: [prism({ W: o.W, D: o.D, hc: o.hc, w: o.w, back: o.back, bulge: 0.7, heart: o.heart || 0, part: P.DISC })], k: 0 };
+  return { prims: [prism({ W: o.W, D: o.D, hc: o.hc, w: o.w, back: o.back, bulge: 0.7, heart: o.heart || 0, part: P.DISC, aff: o.aff })], k: 0 };
 }
 
 // Tapered slab between two points of a sagittal centreline: lateral half-width and front/back offsets
@@ -405,7 +411,9 @@ function sacrum(sg) {
     if (i === 4) for (const sx of [-1, 1]) pr.push(ell(toL([sx * 5, 1.5, -s.D / 2 - 4]), [2.4, 3.6, 2.4], P.CREST));
   });
   // median sacral crest: a low ridge of fused spinous tubercles down the dorsal midline (S1-S4)
-  pr.push(taper(nodes[0], nodes[3], 3.6 * WID, 2.6 * WID, zb[0] + 3, zb[3] + 3, zb[0] - 5, zb[3] - 3.5, 1.6, P.CREST));
+  const n0 = [0, nodes[0][1] + (nodes[1][1] - nodes[0][1]) * 0.45, nodes[0][2] + (nodes[1][2] - nodes[0][2]) * 0.45];
+  const zb0 = zb[0] + (zb[1] - zb[0]) * 0.45;
+  pr.push(taper(n0, nodes[3], 3.6 * WID, 2.6 * WID, zb0 + 3, zb[3] + 3, zb0 - 5, zb[3] - 3.5, 1.6, P.CREST));
   // sacral canal (open at the base) and the hiatus behind S4-S5
   const cw = [15, 13, 11, 9, 7, 5].map((v) => v * WID), cf = sg.map((s) => -s.D / 2 - 0.6), cb = sg.map((s) => -s.D / 2 - s.cd);
   const above = [0, nodes[0][1] + 12 * Math.cos(sg[0].psi), nodes[0][2] + 12 * Math.sin(sg[0].psi)];
@@ -568,10 +576,12 @@ function build() {
   return { els, s1Plate, hip, subject: SUBJECT, posture: POSTURE };
 }
 function toWorld(el, l) {
+  if (el.R) { const R = el.R; return [0, 1, 2].map((i) => el.o[i] + R[i][0] * l[0] + R[i][1] * l[1] + R[i][2] * l[2]); }
   const c = Math.cos(el.psi), s = Math.sin(el.psi);
   return [el.o[0] + l[0], el.o[1] + l[1] * c - l[2] * s, el.o[2] + l[1] * s + l[2] * c];
 }
 function toLocal(el, w) {
+  if (el.R) { const R = el.R, d = [w[0] - el.o[0], w[1] - el.o[1], w[2] - el.o[2]]; return [0, 1, 2].map((j) => R[0][j] * d[0] + R[1][j] * d[1] + R[2][j] * d[2]); }
   const c = Math.cos(el.psi), s = Math.sin(el.psi), dy = w[1] - el.o[1], dz = w[2] - el.o[2];
   return [w[0] - el.o[0], dy * c + dz * s, -dy * s + dz * c];
 }
@@ -580,7 +590,7 @@ function toLocal(el, w) {
 function shapeOf(el) {
   if (el.kind === "disc") {
     const heart = el.region === "thoracic" ? 1 : 0;
-    return disc({ W: el.W * 0.98, D: el.D * 0.98, hc: el.hc, w: el.w, back: el.region === "lumbar" ? 2 : el.region === "thoracic" ? 1.2 : 0.6, heart });
+    return disc({ W: el.W * 0.98, D: el.D * 0.98, hc: el.hc, w: el.w, back: el.region === "lumbar" ? 2 : el.region === "thoracic" ? 1.2 : 0.6, heart, aff: el.aff });
   }
   if (el.kind === "sacrum") return sacrum(el.segs);
   if (el.kind === "coccyx") return coccyx(el.segs);
