@@ -345,7 +345,9 @@ function prism(o) {
     const yt = hh + z * tw, yb = -hh - z * tw;       // top / bottom planes (wedge)
     const ym = (yt + yb) / 2, yh = (yt - yb) / 2;
     const s = 1 + (bulge > 0 ? (bulge / rx) * Math.max(0, 1 - ((y - ym) / yh) ** 2) : 0);
-    const kx = rx * s * (1 - heart * Math.max(0, z / rz) ** 2 * 0.35), kz = rz * s;
+    const hf = 1 - heart * Math.max(0, z / rz) ** 2 * 0.35;
+    // heart-shaped narrowing; a posed disc's padded box reaches further forward, so keep the factor positive there
+    const kx = rx * s * (aff ? Math.max(0.3, hf) : hf), kz = rz * s;
     let d = (Math.hypot(x / kx, z / kz) - 1) * Math.min(kx, kz);
     if (back > 0) d = Math.max(d, (-rz + back * (1 - (x / (rx * 0.85)) ** 2)) - z);
     if (aff) {
