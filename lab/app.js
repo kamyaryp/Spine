@@ -21,7 +21,7 @@ const PRESETS = {
 const PART_COLORS = [null, "#d9a441", "#5aa6c9", "#8b7fd1", "#5fb38a", "#d9708a", "#c98b5a", "#7c9cd9"];
 const DEFAULTS = {
   mode: "sheet", view: "front", yaw: 0, pitch: 0, mm: 1, zoom: "fit", bg: "checker",
-  grid: false, guides: true, anatomy: false,
+  guides: true, anatomy: false,
   lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1,
   outline: true, lines: true, gap: 3, rim: true, clusters: true,
   palette: PRESETS["Study bone"].slice(), preset: "Study bone",
@@ -43,9 +43,10 @@ const rgbHex = (r) => "#" + r.map((v) => Math.max(0, Math.min(255, Math.round(v)
 // ---------- geometry cache + worker ----------
 const cache = new Map();
 const pending = new Map();   // key -> {resolvers, progress}
-const frameSize = (mm, pitch) => {
+// Every frame is square (96 × 96 mm), whatever the angle, so all views share one canvas size.
+const frameSize = (mm) => {
   const W = Math.round(96 / mm);
-  return { W, H: pitch === 0 ? Math.round(64 / mm) : W };
+  return { W, H: W };
 };
 const keyOf = (yaw, pitch, mm) => `${yaw}|${pitch}|${mm}`;
 
@@ -239,12 +240,6 @@ function drawSprite(canvas, st, z, hoverPart) {
   const off = document.createElement("canvas"); off.width = W; off.height = H;
   off.getContext("2d").putImageData(paint(st, hoverPart), 0, 0);
   ctx.drawImage(off, 0, 0, W * z, H * z);
-  if (S.grid && z >= 5) {
-    ctx.strokeStyle = "rgba(255,255,255,0.08)"; ctx.lineWidth = 1; ctx.beginPath();
-    for (let x = 1; x < W; x++) { ctx.moveTo(x * z + 0.5, 0); ctx.lineTo(x * z + 0.5, H * z); }
-    for (let y = 1; y < H; y++) { ctx.moveTo(0, y * z + 0.5); ctx.lineTo(W * z, y * z + 0.5); }
-    ctx.stroke();
-  }
   if (S.guides) {
     ctx.save();
     ctx.strokeStyle = "rgba(124,196,216,0.75)"; ctx.setLineDash([z * 2, z * 2]); ctx.lineWidth = 1; ctx.beginPath();
@@ -367,7 +362,7 @@ function syncControls() {
   const ranges = { yaw: (v) => v + "°", pitch: (v) => v + "°", lightDir: (v) => v + "°", lightFront: (v) => v + "°",
     ambient: (v) => v.toFixed(2), aoStr: (v) => v.toFixed(2), exposure: (v) => v.toFixed(2), gap: (v) => v.toFixed(1) + " mm" };
   for (const k in ranges) { $(k).value = S[k]; $(k + "-out").textContent = ranges[k](S[k]); }
-  for (const k of ["outline", "lines", "rim", "clusters", "grid", "guides", "anatomy"]) $(k).checked = S[k];
+  for (const k of ["outline", "lines", "rim", "clusters", "guides", "anatomy"]) $(k).checked = S[k];
   $("gap").disabled = !S.lines;
   SLOTS.forEach((s, i) => { $("pal-" + s).value = S.palette[i]; $("pal-" + s + "-hex").textContent = S.palette[i]; });
   $("preset").value = PRESETS[S.preset] ? S.preset : "";
@@ -391,7 +386,7 @@ function buildControls() {
   bindRange("lightDir", "lightDir", (v) => v + "°"); bindRange("lightFront", "lightFront", (v) => v + "°");
   bindRange("ambient", "ambient", (v) => v.toFixed(2)); bindRange("aoStr", "aoStr", (v) => v.toFixed(2));
   bindRange("exposure", "exposure", (v) => v.toFixed(2)); bindRange("gap", "gap", (v) => v.toFixed(1) + " mm");
-  ["outline", "lines", "rim", "clusters", "grid", "guides", "anatomy"].forEach((k) => bindCheck(k, k));
+  ["outline", "lines", "rim", "clusters", "guides", "anatomy"].forEach((k) => bindCheck(k, k));
   $("lines").addEventListener("change", () => { $("gap").disabled = !S.lines; });
   // palette
   const pw = $("palette");
@@ -479,7 +474,6 @@ async function exportPng(scale) {
 // ---------- boot ----------
 buildControls();
 syncControls();
-$("save-1x").addEventListener("click", () => exportPng(1));
 $("save-zoom").addEventListener("click", () => exportPng(4));
 let rt; new ResizeObserver(() => { clearTimeout(rt); rt = setTimeout(render, 120); }).observe($("stage"));
 attachHover($("cv-single"));

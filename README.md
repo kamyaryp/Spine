@@ -16,12 +16,12 @@ The skeleton stays the structural base for every later layer.
 `index.html` is an interactive lab for the style study. Open it in a browser, or serve the repository with GitHub Pages. It renders one lumbar vertebra (L3) from a 3D model straight to pixel art in the browser.
 
 - **Views:** front, front 3/4, side, back 3/4 and back, all at eye level, plus a top view for reference. Custom angles move in 15° steps.
-- **Scale and display:** 1 to 4 mm per pixel, zoom, a choice of backgrounds, a pixel grid and pivot guides.
+- **Scale and display:** 1 to 4 mm per pixel, zoom, a choice of backgrounds and pivot guides. Every view uses the same square 96 × 96 mm frame.
 - **Light:** direction, how much it faces the viewer, ambient light, crevice shadow and exposure.
 - **Pixel rules:** outline, interior contour lines, rim light and pixel-cluster cleanup.
 - **Palette:** editable, with presets.
 - **Anatomy:** a colour-by-anatomy mode, and a hover readout showing the part, tone and offset from the pivot.
-- **Export:** PNG at 1× or 4×, and the current style settings as JSON.
+- **Export:** PNG at 4×, and the current style settings as JSON.
 
 ## How the style works
 
@@ -53,7 +53,7 @@ The repository is code only: every image is generated. Export sprites from the l
 |---|---|
 | `index.html` | The lab as a single self-contained page (built from `lab/`). |
 | `lab/` | Lab sources: `geo.js` (the shape and ray caster), `app.js` (UI and pixel rules), `shell.html` (page). Run `python lab/build.py` to rebuild `index.html`. |
-| `tools/vertebra.py` | The original Python renderer (numpy and Pillow): `python tools/vertebra.py 1.0 out` writes the six views at 1 mm/px. |
+| `tools/vertebra.py` | The original Python renderer (numpy and Pillow): `python tools/vertebra.py 1.0 out` writes the six views at 1 mm/px as 96 × 96 px frames. |
 
 ## Open question
 

@@ -231,9 +231,9 @@ if __name__ == "__main__":
     mm = float(sys.argv[1]) if len(sys.argv) > 1 else 1.5
     out = sys.argv[2] if len(sys.argv) > 2 else "out"
     os.makedirs(out, exist_ok=True)
-    W = int(round(96 / mm)); H = int(round(64 / mm))
+    W = H = int(round(96 / mm))          # square 96 x 96 mm frame for every view
     for name, yaw, pitch in VIEWS:
-        size = (W, W) if pitch == 90 else (W, H)
+        size = (W, H)
         c = (0, 0)       # top view: centre the AP span
         cov, sh, dp = render(yaw, pitch, mm, size, center=c)
         img = stylise(cov, sh, dp)

@@ -113,7 +113,6 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
     <div class="seg" id="mode-seg" role="group" aria-label="Layout"></div>
     <div class="spacer"></div>
     <div id="export">
-      <button class="btn" type="button" id="save-1x">Save PNG 1×</button>
       <button class="btn" type="button" id="save-zoom">Save PNG 4×</button>
     </div>
     <button class="btn" type="button" id="copy-settings">Copy style JSON</button>
@@ -136,7 +135,6 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <h2>Background</h2>
       <div class="seg" id="bg-seg" role="group" aria-label="Background"></div>
       <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
-      <label class="check" for="grid"><input type="checkbox" id="grid"> Pixel grid <small>at 5× and up</small></label>
       <label class="check" for="anatomy"><input type="checkbox" id="anatomy"> Colour by anatomy</label>
       <ul id="legend" hidden></ul>
     </section>
@@ -173,7 +171,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <div id="busy" hidden></div>
       <div id="sheet"></div>
       <div class="single">
-        <canvas id="cv-single" width="96" height="64"></canvas>
+        <canvas id="cv-single" width="96" height="96"></canvas>
         <div id="single-label"></div>
       </div>
     </div>
