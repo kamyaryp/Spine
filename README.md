@@ -4,8 +4,8 @@ A pixel-art character for demonstrating physical exercises. The character is bui
 
 The work goes in stages:
 
-1. **Pixel-art style.** Current stage: a lumbar vertebra style study.
-2. Full skeleton.
+1. **Pixel-art style.** Done: a lumbar vertebra style study (`index.html`).
+2. **Skeleton.** In progress: the complete spinal column (`spine/`).
 3. Body built around the skeleton.
 4. Close-fitting clothing, with each clothed region in its own colour.
 
@@ -22,6 +22,30 @@ The skeleton stays the structural base for every later layer.
 - **Palette:** editable, with presets.
 - **Anatomy:** a colour-by-anatomy mode, and a hover readout showing the part, tone and offset from the pivot.
 - **Export:** PNG at 4×, and the current style settings as JSON.
+
+## Spinal column (`spine/`)
+
+`spine/index.html` renders the assembled column in the browser from eight fixed eye-level angles: front, back, both sides and four three-quarter views. Each view uses the same 800 × 800 frame at 1 px = 1 mm, rotated about one pivot. The page has vertebra labels, pivot guides, a colour-by-region mode, a hover readout and PNG export.
+
+- **Subject:** adult female, 183 cm, 78 kg, neutral standing posture. Weight does not thicken the bones; it is left for muscle and soft tissue later.
+- **Elements:** 24 vertebrae (C1–C7, T1–T12, L1–L5), the sacrum and the coccyx as fused units, and 23 discs (C2–C3 to L5–S1). Each has a stable ID: `C1` … `L5`, `S`, `Co`, `D_C2_C3` … `D_L5_S1`.
+- **Regional anatomy:**
+  - Cervical: uncinate processes, articular pillars, foramina transversaria, bifid spinous processes, and C7 as the vertebra prominens.
+  - Atlas (C1) and axis (C2): built separately, with the dens.
+  - Thoracic: heart-shaped bodies, coronal facets, and long sloping spinous processes.
+  - Lumbar: based on the approved style study.
+  - Sacrum: alae, foramina, median crest and hiatus.
+- **Dimensions:** adult reference vertebral dimensions (Panjabi et al.) scaled to stature, with a female transverse factor.
+- **Sagittal posture:** sacral slope 41°, lumbar lordosis about 57°, thoracic kyphosis T4–T12 about 36°, cervical lordosis about 18°. The C7 plumb line lands 20 mm in front of the S1 posterior corner.
+- **Calibration:** body and disc heights are calibrated to landmarks of the whole figure: the hip, the iliac crest at L4–L5, cervicale at C7, and room left for the skull.
+- **Rig:** each element has a local frame, origin at its body centre with y along the body axis. The sacrum is the root. Each of the 24 motion segments carries a pivot and a representative range of motion (White & Panjabi). Discs deform between their end plates.
+
+| Command (Node, no dependencies) | Output |
+|---|---|
+| `node spine/tools/build-viewer.js` | rebuilds `spine/index.html` from `spine/src` and `spine/viewer` |
+| `node spine/tools/render-views.js out 4` | eight transparent PNG views in `out/` |
+| `node spine/tools/validate.js out` | validation report: counts, curves, balance, lengths, contacts, view consistency |
+| `node spine/tools/export-rig.js out/spine-rig.json` | element frames, motion segments, pivots and ranges of motion |
 
 ## How the style works
 

@@ -1,0 +1,1070 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Spine Views</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen viewer. View picker and display options on the left, the 800 x 800 frame on the right.
+   Single dark world on purpose: sprites are judged against a neutral, unlit workspace. */
+:root {
+  --bg: #15181c; --panel: #1d2126; --raise: #272c33; --line: #333941;
+  --ink: #e7e2d6; --muted: #8f969e; --accent: #7cc4d8; --accent-ink: #0e1a1f;
+  --f-display: "Pixelify Sans", "Courier New", monospace;
+  --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 13px; line-height: 1.4; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.app { height: 100%; display: grid; grid-template-columns: 270px minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto; }
+header { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
+h1 { font-family: var(--f-display); font-size: 22px; font-weight: 600; margin: 0; }
+header small { color: var(--muted); }
+.spacer { flex: 1; }
+.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+.btn:hover { border-color: var(--muted); }
+.rail { grid-row: 2 / 4; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); }
+.group { padding: 12px 16px; display: grid; gap: 8px; border-bottom: 1px solid var(--line); }
+.group h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+#views { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+#views button { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 7px 6px; cursor: pointer; text-align: left; }
+#views button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+.seg { display: flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.seg button { flex: 1; border: 0; background: transparent; padding: 5px 6px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.check { display: flex; gap: 8px; align-items: center; cursor: pointer; }
+.check input { accent-color: var(--accent); margin: 0; }
+.legend { display: grid; gap: 3px; margin: 2px 0 0 22px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+#stage { position: relative; overflow: auto; padding: 20px; min-height: 0; }
+.frame { position: relative; display: inline-block; border: 1px solid var(--line); }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+#lbl-layer { position: absolute; inset: 0; pointer-events: none; }
+.lbl { position: absolute; font-family: var(--f-mono); font-size: 11px; color: var(--muted); transform: translateY(-50%); white-space: nowrap; }
+.lbl.l { transform: translate(-100%, -50%); }
+#caption { color: var(--muted); font-size: 12px; margin-top: 8px; }
+#busy { position: absolute; top: 12px; right: 16px; background: var(--raise); border: 1px solid var(--line); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--accent); }
+.statusbar { border-top: 1px solid var(--line); background: var(--panel); padding: 7px 16px; min-height: 34px; }
+#status { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+@media (max-width: 760px) { .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(70vh, 1fr) auto; height: auto; } .rail { grid-row: auto; border-right: 0; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>Spine Views</h1><small>Adult female, 183 cm · C1–L5, sacrum, coccyx and 23 discs · pixel art rendered from code</small>
+    <div class="spacer"></div>
+    <button class="btn" type="button" id="save">Save PNG (1 px = 1 mm)</button>
+  </header>
+  <aside class="rail" aria-label="Controls">
+    <section class="group"><h2>View</h2><div id="views" role="group" aria-label="Camera angle"></div>
+      <p class="hint">Eight fixed eye-level angles around one pivot. A vertebra sits at the same screen height in every view.</p></section>
+    <section class="group"><h2>Zoom</h2><div class="seg" id="zoom" role="group" aria-label="Zoom"></div>
+      <h2>Background</h2><div class="seg" id="bg" role="group" aria-label="Background"></div></section>
+    <section class="group"><h2>Overlays</h2>
+      <label class="check" for="labels"><input type="checkbox" id="labels"> Vertebra labels</label>
+      <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
+      <label class="check" for="regions"><input type="checkbox" id="regions"> Colour by region</label>
+      <div class="legend"><span><i style="background:#d9a441"></i>Cervical</span><span><i style="background:#5aa6c9"></i>Thoracic</span><span><i style="background:#8b7fd1"></i>Lumbar</span><span><i style="background:#5fb38a"></i>Sacrum</span><span><i style="background:#d9708a"></i>Coccyx</span></div>
+    </section>
+  </aside>
+  <main id="stage"><div id="busy" hidden></div>
+    <div class="frame"><canvas id="cv" width="800" height="800"></canvas><div id="lbl-layer"></div></div>
+    <div id="caption"></div>
+  </main>
+  <div class="statusbar"><div id="status"></div></div>
+</div>
+<script id="core-src">
+// Spine core: anatomy data, assembly (rig) and SDF shapes for every element of the spinal column.
+// Units: millimetres. Character space: x = subject's left, y = up (0 = floor), z = anterior.
+// Every element (vertebra, disc, sacrum, coccyx) has a local frame: origin at its body centre,
+// y along the body axis (normal to the mid-plane between its end plates), z anterior, x left.
+// Local -> world is a rotation about x by `psi` (sagittal tilt) plus a translation.
+(function (root) {
+"use strict";
+const DEG = Math.PI / 180;
+
+// ------------------------------------------------------------------------------------------
+// 1. Subject and scaling
+// ------------------------------------------------------------------------------------------
+const SUBJECT = { sex: "female", height: 1830, mass: 78 };
+// Reference vertebral dimensions below are adult means (Panjabi et al. 1991/1992 style,
+// mostly male specimens of ~176 cm). Lengths scale with stature; transverse/AP sizes get a
+// further female factor (female vertebral cross-sections are smaller at equal stature).
+const LEN = SUBJECT.height / 1760;      // 1.04
+const WID = LEN * 0.93;                 // 0.967
+// Regional height calibration so the assembled column meets external landmarks of the whole figure
+// (S1 from the hip, cervicale = C7 spinous tip, atlas below the skull). Applied to body/disc heights.
+const HCAL = { cervical: 1.0, thoracolumbar: 1.03 };
+
+// ------------------------------------------------------------------------------------------
+// 2. Per-level table, C3..L5 (reference values before scaling)
+//    W/D: end-plate width/depth; hp: posterior body height; w: body wedge (deg, + = anterior taller)
+//    cw/cd: canal width/depth; pw/ph: pedicle width/height; tp: transverse-process tip span;
+//    spL: spinous length beyond the lamina; spA: spinous downward inclination (deg); spH: spinous height
+// ------------------------------------------------------------------------------------------
+const T = (id, W, D, hp, w, cw, cd, pw, ph, tp, spL, spA, spH) => ({ id, W, D, hp, w, cw, cd, pw, ph, tp, spL, spA, spH });
+const LEVELS = [
+  T("C3", 16.5, 15.5, 14.0, 0, 23.5, 14.5, 5.5, 7.5, 50, 15, 32, 7),
+  T("C4", 17.0, 15.8, 13.8, 0, 24.5, 14.5, 5.5, 7.5, 52, 15, 34, 7),
+  T("C5", 18.0, 16.2, 13.5, 0, 25.0, 14.5, 5.8, 7.5, 54, 16, 36, 7),
+  T("C6", 19.5, 16.8, 13.6, -0.5, 25.0, 14.5, 6.0, 7.5, 56, 20, 38, 8),
+  T("C7", 21.0, 16.5, 14.8, -1, 24.0, 14.5, 6.5, 8.0, 70, 30, 42, 10),
+  T("T1", 26.0, 17.0, 15.5, -0.5, 21.0, 14.5, 8.0, 9.5, 76, 34, 40, 9),
+  T("T2", 26.0, 18.5, 17.0, -1.5, 18.0, 15.0, 7.0, 11.0, 72, 37, 48, 8),
+  T("T3", 26.5, 20.5, 17.5, -3, 16.5, 15.0, 5.0, 11.5, 68, 38, 55, 8),
+  T("T4", 27.0, 22.5, 17.8, -3.5, 16.0, 15.0, 5.0, 11.5, 66, 38, 60, 8),
+  T("T5", 28.0, 24.5, 18.2, -4, 16.0, 15.0, 5.0, 11.5, 64, 39, 63, 8),
+  T("T6", 29.0, 26.0, 18.8, -4.5, 16.0, 15.0, 5.2, 12.0, 62, 39, 65, 8),
+  T("T7", 30.0, 27.5, 19.3, -4.5, 16.0, 15.0, 5.5, 12.0, 60, 39, 65, 8),
+  T("T8", 31.5, 28.5, 19.8, -4, 16.5, 15.0, 6.0, 12.5, 58, 37, 62, 8),
+  T("T9", 33.0, 29.5, 20.6, -3.5, 16.5, 15.5, 6.5, 13.0, 56, 35, 56, 9),
+  T("T10", 35.0, 30.5, 21.5, -3, 17.0, 15.5, 7.0, 14.0, 54, 33, 46, 10),
+  T("T11", 38.0, 31.0, 22.5, -2.5, 18.0, 16.0, 8.0, 15.0, 46, 31, 30, 12),
+  T("T12", 40.0, 32.0, 23.5, -2, 20.5, 16.5, 8.0, 15.5, 40, 30, 10, 16),
+  T("L1", 42.0, 33.0, 25.5, -3, 22.0, 17.0, 8.5, 15.0, 68, 29, 0, 20),
+  T("L2", 44.0, 34.0, 26.5, -1, 22.0, 17.0, 9.0, 14.5, 76, 29, 0, 22),
+  T("L3", 46.0, 35.0, 26.8, 0, 23.0, 17.0, 10.5, 14.5, 84, 28, 2, 22),
+  T("L4", 48.0, 35.0, 26.2, 1, 24.0, 17.0, 13.0, 14.0, 84, 27, 8, 21),
+  T("L5", 50.0, 35.0, 24.5, 4.5, 26.0, 16.0, 17.0, 14.0, 88, 23, 22, 18),
+];
+// Intervertebral discs: mid-depth height (reference, healthy young adult) and wedge (deg, + = lordotic).
+const DISCS = [
+  ["C2", "C3", 4.5, 3], ["C3", "C4", 5.0, 4], ["C4", "C5", 5.2, 5], ["C5", "C6", 5.5, 5], ["C6", "C7", 5.5, 3], ["C7", "T1", 4.8, 0],
+  ["T1", "T2", 4.2, -0.3], ["T2", "T3", 4.2, -0.3], ["T3", "T4", 4.3, -0.6], ["T4", "T5", 4.3, -0.6], ["T5", "T6", 4.5, -0.6],
+  ["T6", "T7", 4.7, -0.6], ["T7", "T8", 5.0, -0.6], ["T8", "T9", 5.3, -0.6], ["T9", "T10", 5.8, -0.6], ["T10", "T11", 6.3, -0.6],
+  ["T11", "T12", 7.0, -0.5], ["T12", "L1", 8.0, 1],
+  ["L1", "L2", 9.5, 6], ["L2", "L3", 10.5, 8], ["L3", "L4", 11.0, 10], ["L4", "L5", 11.5, 13], ["L5", "S1", 11.0, 19],
+];
+// Global posture targets (healthy adult female, neutral standing).
+const POSTURE = {
+  sacralSlope: 41,          // S1 end plate to horizontal (deg)
+  pelvicTilt: 12,           // hip axis -> S1 centre, from vertical (deg)
+  hipToS1: 95,              // hip axis to S1 end-plate centre (mm)
+  hipHeight: 0.52 * 1830,   // hip joint centre above the floor (mm)
+  c1c2: 22,                 // atlas ring extension relative to the axis (deg)
+};
+// Range of motion per motion segment (deg): flexion+extension, one-side lateral bend, one-side axial rotation.
+// Representative values from White & Panjabi, Clinical Biomechanics of the Spine (2nd ed.).
+const ROM = {
+  "C1-C2": [20, 5, 40], "C2-C3": [10, 10, 3], "C3-C4": [15, 11, 7], "C4-C5": [20, 11, 7], "C5-C6": [20, 8, 7],
+  "C6-C7": [17, 7, 6], "C7-T1": [9, 4, 2], "T1-T2": [4, 6, 9], "T2-T3": [4, 6, 8], "T3-T4": [4, 6, 8], "T4-T5": [4, 6, 8],
+  "T5-T6": [4, 6, 8], "T6-T7": [5, 6, 7], "T7-T8": [6, 6, 7], "T8-T9": [6, 6, 6], "T9-T10": [6, 6, 4], "T10-T11": [9, 7, 2],
+  "T11-T12": [12, 9, 2], "T12-L1": [12, 8, 2], "L1-L2": [12, 6, 2], "L2-L3": [14, 6, 2], "L3-L4": [15, 8, 2],
+  "L4-L5": [16, 6, 2], "L5-S1": [17, 3, 1],
+};
+
+// ------------------------------------------------------------------------------------------
+// 3. SDF primitives (local coordinates). Each returns {d(x,y,z), box:[x0,y0,z0,x1,y1,z1], part, g}
+//    g = group: 0 body (smooth-joined to the arch), 1 arch/processes, 2 subtract.
+// ------------------------------------------------------------------------------------------
+const nrm = (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+function smin(a, b, k) { if (k <= 0) return Math.min(a, b); const h = clamp(0.5 + 0.5 * (b - a) / k, 0, 1); return b * (1 - h) + a * h - k * h * (1 - h); }
+function ellD(x, y, z, cx, cy, cz, rx, ry, rz) {
+  const qx = (x - cx) / rx, qy = (y - cy) / ry, qz = (z - cz) / rz;
+  const k0 = Math.sqrt(qx * qx + qy * qy + qz * qz), k1 = Math.sqrt((qx / rx) ** 2 + (qy / ry) ** 2 + (qz / rz) ** 2);
+  return k0 * (k0 - 1) / Math.max(k1, 1e-6);
+}
+function boxOf(cs, pad) {
+  const b = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (const c of cs) for (let i = 0; i < 3; i++) { b[i] = Math.min(b[i], c[i] - pad[i]); b[i + 3] = Math.max(b[i + 3], c[i] + pad[i]); }
+  return b;
+}
+// oriented rounded box spanning a->b; v: second axis hint; hv, hw half sizes; r corner radius
+function seg(a, b, v, hv, hw, r, part, g = 1) {
+  const d = [b[0] - a[0], b[1] - a[1], b[2] - a[2]], L = Math.hypot(d[0], d[1], d[2]);
+  const u = nrm(d), dt = v[0] * u[0] + v[1] * u[1] + v[2] * u[2];
+  const vv = nrm([v[0] - u[0] * dt, v[1] - u[1] * dt, v[2] - u[2] * dt]), w = cross(u, vv);
+  const c = [(a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2];
+  r = Math.min(r, hv, hw);
+  const h0 = L / 2, h1 = hv - r, h2 = hw - r;
+  const ext = [0, 1, 2].map((i) => Math.abs(u[i]) * (h0 + r) + Math.abs(vv[i]) * hv + Math.abs(w[i]) * hw);
+  return { part, g, box: boxOf([c], ext), d(x, y, z) {
+    const qx = x - c[0], qy = y - c[1], qz = z - c[2];
+    const l0 = Math.abs(qx * u[0] + qy * u[1] + qz * u[2]) - h0, l1 = Math.abs(qx * vv[0] + qy * vv[1] + qz * vv[2]) - h1, l2 = Math.abs(qx * w[0] + qy * w[1] + qz * w[2]) - h2;
+    const m0 = l0 > 0 ? l0 : 0, m1 = l1 > 0 ? l1 : 0, m2 = l2 > 0 ? l2 : 0;
+    return Math.sqrt(m0 * m0 + m1 * m1 + m2 * m2) + Math.min(Math.max(l0, l1, l2), 0) - r;
+  } };
+}
+function caps(a, b, ra, rb, part, g = 1, s = [1, 1, 1]) {
+  const ax = a[0] / s[0], ay = a[1] / s[1], az = a[2] / s[2];
+  const bx = b[0] / s[0] - ax, by = b[1] / s[1] - ay, bz = b[2] / s[2] - az, bb = bx * bx + by * by + bz * bz;
+  const sm = Math.min(s[0], s[1], s[2]), R = Math.max(ra, rb);
+  return { part, g, box: boxOf([a, b], [R * s[0], R * s[1], R * s[2]]), d(x, y, z) {
+    const px = x / s[0] - ax, py = y / s[1] - ay, pz = z / s[2] - az;
+    const h = clamp((px * bx + py * by + pz * bz) / bb, 0, 1);
+    const dx = px - h * bx, dy = py - h * by, dz = pz - h * bz;
+    return (Math.sqrt(dx * dx + dy * dy + dz * dz) - (ra + (rb - ra) * h)) * sm;
+  } };
+}
+// cervical articular pillar: vertical block whose top/bottom are oblique facet planes (angle a from horizontal,
+// superior facet facing up-and-back, inferior facet facing down-and-forward)
+function pillar(c, hx, hy, hz, a, r, part, g = 1) {
+  const ca = Math.cos(a * DEG), sa = Math.sin(a * DEG), ext = hy + hz * Math.tan(a * DEG);
+  return { part, g, box: boxOf([c], [hx + 1, ext + 1, hz + 1]), d(x, y, z) {
+    const yy = y - c[1], zz = z - c[2], q = Math.min(1, Math.abs(yy) / hy);
+    const dx = Math.abs(x - c[0]) - (hx * (1 - 0.35 * q * q) - r), dz = Math.abs(z - c[2]) - (hz - r);
+    const dt = (yy - hy) * ca - zz * sa + r * 0, db = -(yy + hy) * ca + zz * sa;
+    const e = Math.max(dx, dz);
+    const box = (e > 0 ? Math.hypot(Math.max(dx, 0), Math.max(dz, 0)) : e) - r;
+    return Math.max(box, dt, db);
+  } };
+}
+function ell(c, r, part, g = 1) {
+  return { part, g, box: boxOf([c], r), d: (x, y, z) => ellD(x, y, z, c[0], c[1], c[2], r[0], r[1], r[2]) };
+}
+// cylinder (for holes): axis through c along unit a, radius r, half length hl
+function cyl(c, a, r, hl, part = 19, g = 2) {
+  const u = nrm(a);
+  return { part, g, box: boxOf([c], [hl + r, hl + r, hl + r]), d(x, y, z) {
+    const qx = x - c[0], qy = y - c[1], qz = z - c[2], t = qx * u[0] + qy * u[1] + qz * u[2];
+    const rx = qx - t * u[0], ry = qy - t * u[1], rz = qz - t * u[2];
+    const dr = Math.sqrt(rx * rx + ry * ry + rz * rz) - r, dh = Math.abs(t) - hl;
+    return Math.min(Math.max(dr, dh), 0) + Math.hypot(Math.max(dr, 0), Math.max(dh, 0));
+  } };
+}
+// vertebral body / disc prism: elliptic (optionally heart or kidney shaped) section, wedge end planes.
+// opt: {W, D, hc, w (deg), back (posterior concavity mm), heart (0..1 anterior narrowing), cup (end-plate cup depth),
+//       lip (ring apophysis), bulge (disc bulge mm), part}
+function prism(o) {
+  const rx = o.W / 2, rz = o.D / 2, tw = Math.tan((o.w || 0) * DEG / 2), hh = o.hc / 2;
+  const back = o.back || 0, heart = o.heart || 0, cup = o.cup || 0, bulge = o.bulge || 0;
+  const pad = [rx + bulge + 1, hh + Math.abs(tw) * rz + 1, rz + bulge + 1];
+  return { part: o.part, g: o.g != null ? o.g : 0, box: [-pad[0], -pad[1], -pad[2], pad[0], pad[1], pad[2]], d(x, y, z) {
+    const yt = hh + z * tw, yb = -hh - z * tw;       // top / bottom planes (wedge)
+    const ym = (yt + yb) / 2, yh = (yt - yb) / 2;
+    const s = 1 + (bulge > 0 ? (bulge / rx) * Math.max(0, 1 - ((y - ym) / yh) ** 2) : 0);
+    const kx = rx * s * (1 - heart * Math.max(0, z / rz) ** 2 * 0.35), kz = rz * s;
+    let d = (Math.hypot(x / kx, z / kz) - 1) * Math.min(kx, kz);
+    if (back > 0) d = Math.max(d, (-rz + back * (1 - (x / (rx * 0.85)) ** 2)) - z);
+    d = Math.max(d, Math.abs(y - ym) - yh);
+    if (cup > 0) {
+      const c1 = ellD(x, y, z, 0, yt + cup * 0.75, 0, rx * 0.72, cup * 1.4, rz * 0.68);
+      const c2 = ellD(x, y, z, 0, yb - cup * 0.75, 0, rx * 0.72, cup * 1.4, rz * 0.68);
+      d = Math.max(d, -c1, -c2);
+    }
+    return d;
+  } };
+}
+
+// ------------------------------------------------------------------------------------------
+// 4. Element builders. Each returns {prims, k} in local coordinates.
+// ------------------------------------------------------------------------------------------
+const P = { BODY: 1, PEDICLE: 2, LAMINA: 3, TP: 4, SAP: 5, IAP: 6, SPINOUS: 7, DENS: 8, ANT_ARCH: 9, POST_ARCH: 10,
+  LAT_MASS: 11, DISC: 12, ALA: 13, CREST: 14, COCCYX: 15, UNCINATE: 16, PILLAR: 17, SACRAL_BODY: 18, FORAMEN: 19 };
+const PART_NAMES = { 1: "Vertebral body", 2: "Pedicle", 3: "Lamina", 4: "Transverse process", 5: "Superior articular process",
+  6: "Inferior articular process", 7: "Spinous process", 8: "Dens (odontoid process)", 9: "Anterior arch", 10: "Posterior arch",
+  11: "Lateral mass", 12: "Intervertebral disc", 13: "Sacral ala / lateral part", 14: "Median sacral crest", 15: "Coccygeal segment",
+  16: "Uncinate process", 17: "Articular pillar", 18: "Sacral vertebral body", 19: "Foramen" };
+
+function scaled(L) {
+  const hk = L.id[0] === "C" ? HCAL.cervical : HCAL.thoracolumbar;
+  return { id: L.id, W: L.W * WID, D: L.D * WID, hp: L.hp * LEN * hk, w: L.w, cw: L.cw * WID, cd: L.cd * WID, pw: L.pw * WID,
+    ph: L.ph * LEN, tp: L.tp * WID, spL: L.spL * LEN, spA: L.spA, spH: L.spH * LEN };
+}
+const hcOf = (v) => v.hp + (v.D / 2) * Math.tan(v.w * DEG);
+
+function lumbar(v) {
+  const hc = hcOf(v), D = v.D, zp = -D / 2, cw = v.cw, cd = v.cd, pw = v.pw;
+  const px = cw / 2 + pw / 2 - 0.5, yp = hc * 0.14, pl = Math.max(9, cd * 0.55), lt = 4.6;
+  const zl = zp - cd - lt / 2;                         // lamina midline (centre of thickness)
+  const pr = [prism({ W: v.W, D, hc, w: v.w, back: 2.4, cup: 3.2, part: P.BODY })];
+  const isL5 = v.id === "L5";
+  for (const s of [-1, 1]) {
+    pr.push(caps([s * px, yp, zp + 3], [s * px, yp - 0.5, zp - pl], pw / 2, pw / 2, P.PEDICLE, 1, [1, v.ph / pw, 1]));
+    pr.push(seg([s * px, yp, zp - pl], [s * 2, yp - 5.5, zl], [0, 1, 0], 6.5, lt, 2, P.LAMINA));
+    // transverse process: long and slender, flattened front-to-back; L5's is stout and arises from the body too
+    const tx = v.tp / 2, tz = zp - pl * 0.45 - 2;
+    if (isL5) {
+      pr.push(caps([s * (px - 2), yp - 2, zp + 2], [s * (tx - 4), yp - 3, tz - 1], 7.5, 4.2, P.TP, 1, [1, 1.1, 0.8]));
+    } else {
+      pr.push(seg([s * (px + 1), yp, tz + 2], [s * (tx - 3), yp + 1, tz - 2.5], [0, 1, 0], 4.6, 3.0, 2.0, P.TP));
+      pr.push(ell([s * (tx - 3), yp + 1, tz - 2.5], [3.8, 4.8, 3.2], P.TP));
+    }
+    // superior articular process: rises above the pedicle, facet facing back-and-in; mammillary process on its rim
+    const zs = zp - pl - 1;
+    pr.push(seg([s * (px + 0.5), yp + 1, zs], [s * (px + 2), hc / 2 + 7.5, zs - 4], [-0.35 * s, 0, -1], 3.7, 6.6, 2.3, P.SAP));
+    pr.push(ell([s * (px + 4.5), hc / 2 + 1.5, zs - 8], [2.8, 3.8, 2.8], P.SAP));
+    // inferior articular process: hangs below the lamina, facet facing forward-and-out
+    const xi = isL5 ? cw / 2 - 0.5 : cw / 2 - 2;
+    pr.push(seg([s * xi, -hc / 2 + 7, zl - 1.5], [s * (xi + 1), -hc / 2 - (isL5 ? 5 : 6.5), zl - 3], [s, 0, 0.3], 3.5, 5.0, 2.3, P.IAP));
+  }
+  // spinous process: hatchet-shaped, horizontal, thick posterior border
+  const a = v.spA * DEG, z0 = zl - 2, y0 = -1.5, dz = -Math.cos(a), dy = -Math.sin(a);
+  const z1 = z0 + dz * v.spL, y1 = y0 + dy * v.spL;
+  pr.push(seg([0, y0, z0], [0, y1, z1], [0, 1, 0], v.spH / 2, 3.6, 2.4, P.SPINOUS));
+  pr.push(caps([0, y1 + v.spH / 2 - 2, z1 - 0.5], [0, y1 - v.spH / 2 + 2, z1 + 0.5], 3.6, 3.6, P.SPINOUS));
+  return { prims: pr, k: 2.6 };
+}
+
+function thoracic(v, lumbarLike) {
+  const hc = hcOf(v), D = v.D, zp = -D / 2, cw = v.cw, cd = v.cd, pw = v.pw;
+  const px = cw / 2 + pw / 2, yp = hc * 0.18, pl = Math.max(7, cd * 0.5), lt = 3.6;
+  const zl = zp - cd - lt / 2;
+  const pr = [prism({ W: v.W, D, hc, w: v.w, back: 1.6, heart: 1, cup: 2.4, part: P.BODY })];
+  for (const s of [-1, 1]) {
+    pr.push(caps([s * px, yp, zp + 2], [s * px, yp, zp - pl], pw / 2, pw / 2, P.PEDICLE, 1, [1, v.ph / pw, 1]));
+    // lamina: broad, shingled plate reaching below the body
+    pr.push(seg([s * (px + 1), yp + 2, zp - pl], [s * 2, -hc / 2 - 1, zl], [0, 0.6, -0.4], hc * 0.36, lt / 2 + 0.6, 1.6, P.LAMINA));
+    // transverse process: backwards-and-out, slightly up, club-shaped tip (costal facet)
+    const bx = px + 1.5, bz = zp - pl + 1, tx = v.tp / 2 - 3.5;
+    const back = Math.tan((22 + (v.idx - 5) * 1.2) * DEG) * (tx - bx);
+    const tipZ = bz - back, tipY = yp + 2.5;
+    pr.push(seg([s * bx, yp + 1, bz], [s * tx, tipY, tipZ], [0, 1, 0], v.id === "T12" ? 3.2 : 4.4, v.id === "T12" ? 2.6 : 3.6, 1.8, P.TP));
+    pr.push(ell([s * tx, tipY, tipZ], v.id === "T12" ? [3, 3.5, 3] : [4.6, 5, 4.4], P.TP));
+    // superior articular process: thin plate, facet nearly coronal (faces back)
+    const zs = zp - pl - 0.5, zsap = v.id === "T1" ? zs + 2 : zs;
+    pr.push(seg([s * (px - 0.5), yp + 2, zsap], [s * (px - 0.5), hc / 2 + 4.5, zsap - 1.5], [s, 0, 0], 4.0, 2.2, 1.6, P.SAP));
+    // inferior articular process: below the lamina, facet faces forward (lumbar-like in T12 and lumbarLike)
+    if (lumbarLike) {
+      pr.push(seg([s * (cw / 2 - 2.5), -hc / 2 + 5, zl - 1], [s * (cw / 2 - 1.5), -hc / 2 - 8, zl - 2], [s, 0, 0.3], 3.2, 4.5, 2, P.IAP));
+    } else {
+      pr.push(seg([s * (px - 1.5), -hc / 2 + 2, zs - 5.4], [s * (px - 1.5), -hc / 2 - 5.5, zs - 6.2], [s, 0, 0], 3.8, 2.0, 1.5, P.IAP));
+    }
+  }
+  // spinous process: long, slender, sloping steeply downwards in the mid-thoracic region
+  const a = v.spA * DEG, z0 = zl - 1, y0 = -hc * 0.12, dz = -Math.cos(a), dy = -Math.sin(a);
+  const z1 = z0 + dz * v.spL, y1 = y0 + dy * v.spL;
+  pr.push(seg([0, y0, z0], [0, y1, z1], [0, -dz, dy], v.spH / 2, 2.6, 1.8, P.SPINOUS));
+  pr.push(ell([0, y1, z1], [3.2, Math.max(3.4, v.spH / 2 + 0.6), 3.2], P.SPINOUS));
+  return { prims: pr, k: 2.2 };
+}
+
+function cervical(v) {
+  const hc = hcOf(v), D = v.D, zp = -D / 2, cw = v.cw, cd = v.cd, pw = v.pw;
+  const isC7 = v.id === "C7", px = cw / 2 + pw / 2, pl = 5.5, lt = 3.0;
+  const zl = zp - cd - lt / 2;
+  const pr = [prism({ W: v.W, D, hc, w: v.w, back: 0.8, cup: 0, part: P.BODY })];
+  // anterior-inferior lip of the body
+  pr.push({ ...ell([0, -hc / 2 + 0.5, D / 2 - 2.2], [v.W * 0.33, 2.4, 2.6], P.BODY), g: 0 });
+  for (const s of [-1, 1]) {
+    // uncinate processes: raised lateral lips of the superior end plate
+    pr.push({ ...ell([s * (v.W / 2 - 1.6), hc / 2 + 0.6, -1], [1.8, 3.2, D * 0.33], P.UNCINATE), g: 0 });
+    pr.push(caps([s * px, 0.5, zp + 2], [s * px, 0.5, zp - pl], pw / 2, pw / 2, P.PEDICLE, 1, [1, v.ph / pw, 1]));
+    // articular pillar (lateral mass) with oblique facets: top faces up-and-back
+    const zc = zp - pl - 2.5, xc = px + 1.2;
+    pr.push(pillar([s * xc, 0, zc], 5.0, hc / 2 + 1.5, 5.2, 45, 1.6, P.PILLAR));
+    // lamina: thin, slanting back to the midline
+    pr.push(seg([s * (xc - 2), -0.5, zc - 3], [s * 1.5, -2, zl], [0, 1, 0], hc * 0.26, lt / 2, 1.2, P.LAMINA));
+    // transverse process: anterolateral, gutter with foramen transversarium; tubercles at the tip
+    const tx = v.tp / 2, tz = zp + 3.5;
+    pr.push(seg([s * (v.W / 2 - 2), -0.5, tz], [s * (tx - 2.5), -2.2, tz + (isC7 ? -3 : 0.5)], [0, 1, 0], 2.8, isC7 ? 3.4 : 5.2, 1.4, P.TP));
+    if (!isC7) pr.push(ell([s * (tx - 2.5), -2.8, tz + 3], [2.4, 2.8, 2.4], P.TP));
+    pr.push(ell([s * (tx - 2.5), -2.6, tz - (isC7 ? 3 : 2.6)], [2.6, 3, 2.6], P.TP));
+    pr.push(cyl([s * (v.W / 2 + 3.2), 0, tz + 0.4], [0, 1, 0], isC7 ? 2.0 : 2.7, 8));
+  }
+  // spinous process: short and bifid (C3-C6); long with a single tubercle at C7 (vertebra prominens)
+  const a = v.spA * DEG, z0 = zl - 0.5, y0 = -1, dz = -Math.cos(a), dy = -Math.sin(a);
+  const z1 = z0 + dz * v.spL, y1 = y0 + dy * v.spL;
+  pr.push(seg([0, y0, z0], [0, y1, z1], [0, -dz, dy], v.spH / 2, isC7 ? 3.2 : 2.6, 1.6, P.SPINOUS));
+  if (isC7) pr.push(ell([0, y1, z1], [4.4, 4.6, 4.2], P.SPINOUS));
+  else for (const s of [-1, 1]) pr.push(ell([s * 2.8, y1 - 0.5, z1 + 0.5], [2.4, 3.0, 2.8], P.SPINOUS));
+  return { prims: pr, k: 1.8 };
+}
+
+// Axis (C2): body + dens, large superior facets, thick laminae, big bifid spinous process.
+function axis(v) {
+  const hc = v.hc, D = v.D, zp = -D / 2, W = v.W;
+  const pr = [prism({ W, D, hc, w: 0, back: 0.8, part: P.BODY })];
+  pr.push({ ...ell([0, -hc / 2 + 0.6, D / 2 - 2.4], [W * 0.33, 3.4, 2.8], P.BODY), g: 0 });   // anterior-inferior lip
+  const lean = Math.tan(v.densLean * DEG), dTop = hc / 2 + v.densH - v.densR;
+  pr.push({ ...caps([0, hc / 2 - 2, v.densZ], [0, dTop, v.densZ - (v.densH - v.densR + 2) * lean], v.densR, v.densR * 0.92, P.DENS, 0, [0.9, 1, 1]) });
+  pr.push(ell([0, dTop + v.densR * 0.1, v.densZ - (v.densH - v.densR * 0.9 + 2) * lean], [v.densR * 0.95, v.densR * 1.05, v.densR], P.DENS));
+  for (const s of [-1, 1]) {
+    // superior articular facets: broad, flat, sloping laterally, lateral to the dens
+    pr.push(seg([s * 8, hc / 2 - 1.2, v.facetZ], [s * 21, hc / 2 - 5, v.facetZ], [0, 1, 0], 3.2, 8, 2.2, P.SAP));
+    pr.push(seg([s * 13, hc / 2 - 5, v.facetZ], [s * 12.5, -hc / 2 + 3, zp - 4], [1, 0, 0], 5, 5, 2.2, P.PEDICLE));
+    // inferior articular process (C2-C3 facet), behind the pedicle
+    pr.push(pillar([s * 14.5, -hc / 2 + 3, zp - 11], 5.0, 5.4, 5.0, 45, 1.6, P.PILLAR));
+    // thick lamina
+    pr.push(seg([s * 14, -hc / 2 + 6, zp - 13], [s * 2, -hc / 2 + 4, zp - 25], [0, 1, 0], 6.5, 3.0, 1.6, P.LAMINA));
+    // small transverse process pointing down-and-out, with foramen
+    pr.push(seg([s * 15, hc / 2 - 7, zp + 1], [s * 26, hc / 2 - 12, zp], [0, 1, 0], 3.2, 4, 1.4, P.TP));
+    pr.push(cyl([s * 18.5, hc / 2 - 8, zp + 1], [0.3 * s, 1, 0], 2.6, 7));
+  }
+  // large bifid spinous process
+  const ca = Math.cos(32 * DEG), sa = Math.sin(32 * DEG), y0 = -hc / 2 + 5, z0 = zp - 24, L = 20 * LEN;
+  pr.push(seg([0, y0, z0], [0, y0 - sa * L, z0 - ca * L], [0, ca, -sa], 5.6, 3.6, 2.0, P.SPINOUS));
+  for (const s of [-1, 1]) pr.push(ell([s * 4.0, y0 - sa * L - 0.5, z0 - ca * L - 0.5], [3.4, 5.0, 3.6], P.SPINOUS));
+  return { prims: pr, k: 1.8 };
+}
+
+// Atlas (C1): no body. Ring of anterior arch, two lateral masses and a long posterior arch; wide TPs with foramina.
+// Local origin: between the lateral masses, at their mid-height; z anterior.
+function atlas(a) {
+  const pr = [];
+  const lmX = a.lmX, lmH = a.lmH;
+  for (const s of [-1, 1]) {
+    pr.push({ ...seg([s * lmX, 0, a.lmZ + 10], [s * lmX, 0, a.lmZ - 10], [0, 1, 0], lmH / 2, 6.2, 2.6, P.LAT_MASS), g: 0 });
+    pr.push({ ...ell([s * (lmX - 2), lmH / 2 + 3.4, a.lmZ], [6.5, 4.2, 10], 0), g: 2 });       // concave superior facet
+    // transverse process: large, with foramen transversarium
+    pr.push(seg([s * (lmX + 4), 1, a.lmZ - 1], [s * a.tpX, 0, a.lmZ - 3], [0, 1, 0], 3.6, 4.6, 1.8, P.TP));
+    pr.push(ell([s * a.tpX, 0, a.lmZ - 3], [3.6, 4.6, 4.6], P.TP));
+    pr.push(cyl([s * (lmX + 8), 0, a.lmZ - 1], [0, 1, 0], 2.8, 8));
+  }
+  // anterior arch: short curve in front of the dens, with an anterior tubercle
+  const arc = (r0x, r0z, cz, a0, a1, n, hv, hw, yc, part) => {
+    let prev = null;
+    for (let i = 0; i <= n; i++) {
+      const t = a0 + (a1 - a0) * (i / n), pt = [r0x * Math.sin(t), yc, cz + r0z * Math.cos(t)];
+      if (prev) pr.push(seg(prev, pt, [0, 1, 0], hv, hw, Math.min(hv, hw) * 0.8, part));
+      prev = pt;
+    }
+  };
+  arc(lmX + 1, a.archR, 0, -0.95, 0.95, 6, 5.0, 3.0, a.archY, P.ANT_ARCH);
+  pr.push(ell([0, a.archY + 0.5, a.archR + 0.4], [5, 5, 2.6], P.ANT_ARCH));
+  arc(lmX + 2, a.postR, 0, Math.PI - 1.35, Math.PI + 1.35, 10, 3.8, 3.2, -1.5, P.POST_ARCH);
+  pr.push(ell([0, -1.5, -a.postR - 1], [4.5, 4.8, 3.2], P.POST_ARCH));
+  return { prims: pr, k: 1.8 };
+}
+
+function disc(o) {
+  return { prims: [prism({ W: o.W, D: o.D, hc: o.hc, w: o.w, back: o.back, bulge: 0.7, heart: o.heart || 0, part: P.DISC })], k: 0 };
+}
+
+// Tapered slab between two points of a sagittal centreline: lateral half-width and front/back offsets
+// (along the anterior normal) interpolate linearly from a to b. x stays the lateral axis.
+function taper(a, b, hx0, hx1, zf0, zf1, zb0, zb1, r, part, g = 1, topCut, round = 0) {
+  const dy = b[1] - a[1], dz = b[2] - a[2], len = Math.hypot(dy, dz), uy = dy / len, uz = dz / len;
+  const ny = -uz, nz = uy;                       // in-plane normal; choose the one pointing anterior (+z)
+  const sgn = nz >= 0 ? 1 : -1, Ny = ny * sgn, Nz = nz * sgn;
+  const cs = [];
+  for (const [p, hx, zf, zb] of [[a, hx0, zf0, zb0], [b, hx1, zf1, zb1]]) for (const zz of [zf, zb]) for (const xx of [-hx, hx]) cs.push([xx, p[1] + Ny * zz, p[2] + Nz * zz]);
+  return { part, g, box: boxOf(cs, [r + 1, r + 1, r + 1]), d(x, y, z) {
+    const qy = y - a[1], qz = z - a[2], s = qy * uy + qz * uz, Z = qy * Ny + qz * Nz;
+    const t = s < 0 ? 0 : s > len ? 1 : s / len;
+    const hx = hx0 + (hx1 - hx0) * t, q = Math.min(1, Math.abs(x) / Math.max(hx, 1)), q2 = q * q;
+    let zf = zf0 + (zf1 - zf0) * t, zb = zb0 + (zb1 - zb0) * t;
+    if (round) { zf -= round * 0.25 * q2 * (zf - zb); zb += round * 0.4 * q2 * (zf - zb); }   // rounder section laterally
+    const dx = Math.abs(x) - hx + r, dzz = Math.abs(Z - (zf + zb) / 2) - (zf - zb) / 2 + r, du = Math.abs(s - len / 2) - len / 2 - 0.6 + r;
+    let d = Math.hypot(Math.max(dx, 0), Math.max(dzz, 0), Math.max(du, 0)) + Math.min(Math.max(dx, dzz, du), 0) - r;
+    if (topCut) d = Math.max(d, topCut(x, y, z));
+    return d;
+  } };
+}
+
+// Sacrum: one fused bone built from a curved centreline through S1..S5 (sacral local frame = S1 body frame).
+function sacrum(sg) {
+  const pr = [];
+  const nY = (p) => Math.cos(p), nZ = (p) => Math.sin(p);
+  // centreline nodes: S1 plate, the four fused junctions, apex
+  const nodes = [[0, sg[0].cy + nY(sg[0].psi) * sg[0].h / 2, sg[0].cz + nZ(sg[0].psi) * sg[0].h / 2]];
+  for (let i = 0; i < sg.length - 1; i++) nodes.push([0, (sg[i].cy + sg[i + 1].cy) / 2, (sg[i].cz + sg[i + 1].cz) / 2]);
+  const last = sg[sg.length - 1];
+  nodes.push([0, last.cy - nY(last.psi) * last.h / 2, last.cz - nZ(last.psi) * last.h / 2]);
+  const hw = [53, 50, 42, 31, 19, 9].map((v) => v * WID);
+  const zf = [sg[0].D / 2 - 2, (sg[0].D + sg[1].D) / 4 - 2, (sg[1].D + sg[2].D) / 4 - 1.5, (sg[2].D + sg[3].D) / 4 - 1, (sg[3].D + sg[4].D) / 4 - 1, last.D / 2 - 1];
+  const zb = [-35, -31, -26, -21, -15, -8].map((v) => v * WID);
+  const W0 = sg[0].W, top = nodes[0][1];
+  // the alae: superior surface a little below the S1 end plate, sloping down laterally
+  const D0 = sg[0].D;
+  const alaCut = (x, y, z) => y - (top - 4 - 0.2 * Math.max(0, Math.abs(x) - W0 / 2) - 0.45 * Math.max(0, -D0 / 2 - z));
+  const slabs = [];
+  for (let i = 0; i < nodes.length - 1; i++)
+    slabs.push(taper(nodes[i], nodes[i + 1], hw[i], hw[i + 1], zf[i], zf[i + 1], zb[i], zb[i + 1], 2.5, P.ALA, 1, i === 0 ? alaCut : null, 1));
+  // one continuous bone: blend the slabs smoothly
+  const sb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (const p of slabs) for (let k = 0; k < 3; k++) { sb[k] = Math.min(sb[k], p.box[k]); sb[k + 3] = Math.max(sb[k + 3], p.box[k + 3]); }
+  pr.push({ part: P.ALA, g: 1, box: sb, d(x, y, z) { let d = slabs[0].d(x, y, z); for (let i = 1; i < slabs.length; i++) d = smin(d, slabs[i].d(x, y, z), 5); return d; } });
+  // vertebral bodies on the pelvic (anterior) surface; S1 keeps a true end plate and the promontory
+  sg.forEach((s, i) => {
+    const toL = (p) => [p[0], s.cy + p[1] * Math.cos(s.psi) - p[2] * Math.sin(s.psi), s.cz + p[1] * Math.sin(s.psi) + p[2] * Math.cos(s.psi)];
+    if (i === 0) {
+      const b = prism({ W: s.W, D: s.D, hc: s.h, w: 0, back: 1.5, cup: 2.2, part: P.SACRAL_BODY });
+      pr.push({ part: P.SACRAL_BODY, g: 0, box: b.box, d: b.d });
+    }
+    // transverse ridge (fused disc) between bodies
+    if (i < sg.length - 1) pr.push({ ...ell([0, nodes[i + 1][1], nodes[i + 1][2]], [s.W / 2 - 2, 1.6, (s.D + sg[i + 1].D) / 4 - 1.2], P.SACRAL_BODY), g: 0 });
+    // median sacral crest tubercles S1-S4
+    // sacral cornua beside the hiatus
+    if (i === 4) for (const sx of [-1, 1]) pr.push(ell(toL([sx * 5, 1.5, -s.D / 2 - 4]), [2.4, 3.6, 2.4], P.CREST));
+  });
+  // median sacral crest: a low ridge of fused spinous tubercles down the dorsal midline (S1-S4)
+  pr.push(taper(nodes[0], nodes[3], 3.6 * WID, 2.6 * WID, zb[0] + 3, zb[3] + 3, zb[0] - 5, zb[3] - 3.5, 1.6, P.CREST));
+  // sacral canal (open at the base) and the hiatus behind S4-S5
+  const cw = [15, 13, 11, 9, 7, 5].map((v) => v * WID), cf = sg.map((s) => -s.D / 2 - 0.6), cb = sg.map((s) => -s.D / 2 - s.cd);
+  const above = [0, nodes[0][1] + 12 * Math.cos(sg[0].psi), nodes[0][2] + 12 * Math.sin(sg[0].psi)];
+  pr.push(taper(above, nodes[1], cw[0], cw[1], cf[0], (cf[0] + cf[1]) / 2, cb[0], (cb[0] + cb[1]) / 2, 2, 19, 2));
+  for (let i = 1; i < 4; i++) pr.push(taper(nodes[i], nodes[i + 1], cw[i], cw[i + 1], (cf[i - 1] + cf[i]) / 2, (cf[i] + cf[i + 1]) / 2, (cb[i - 1] + cb[i]) / 2, (cb[i] + cb[i + 1]) / 2, 2, 19, 2));
+  pr.push(taper(nodes[3], nodes[5], 7, 5, cf[3], cf[4], cb[3] + 1, -60, 1.5, 19, 2));   // hiatus: canal opens dorsally
+  // anterior/posterior sacral foramina at the four fused junctions (through-holes)
+  for (let i = 1; i <= 4; i++) {
+    const r = [5.6, 5.0, 4.2, 3.4][i - 1] * WID, n = nodes[i];
+    const bw = (sg[i - 1].W + sg[i].W) / 4;
+    const dy = nodes[i + 1][1] - nodes[i - 1][1], dz = nodes[i + 1][2] - nodes[i - 1][2], l = Math.hypot(dy, dz);
+    const ny = -dz / l, nz = dy / l;                                         // anterior normal at the junction
+    const zfj = zf[i] - 1, zbj = zb[i] + 1;
+    for (const sx of [-1, 1]) {
+      // anterior (pelvic) foramen: a pit from the front surface; posterior foramen: smaller pit from the back
+      pr.push(cyl([sx * (bw + r + 2.5), n[1] + ny * zfj, n[2] + nz * zfj], [0, ny, nz], r, 13));
+      pr.push(cyl([sx * (bw + r + 1), n[1] + ny * zbj, n[2] + nz * zbj], [0, ny, nz], r * 0.75, 11));
+    }
+  }
+  // S1 superior articular processes (articulate with L5)
+  const s0 = sg[0];
+  for (const sx of [-1, 1]) {
+    pr.push(seg([sx * (s0.cw / 2 + 4), s0.h / 2 - 4, -s0.D / 2 - 7], [sx * (s0.cw / 2 + 5.5), s0.h / 2 + 9, -s0.D / 2 - 12], [-0.35 * sx, 0, -1], 3.6, 6.4, 2.2, P.SAP));
+  }
+  return { prims: pr, k: 3.0 };
+}
+
+function coccyx(sg) {
+  const pr = [];
+  sg.forEach((s, i) => {
+    const up = [0, Math.cos(s.psi - sg[0].psi), Math.sin(s.psi - sg[0].psi)];
+    const a = [0, s.cy + up[1] * (s.h / 2 - 1), s.cz + up[2] * (s.h / 2 - 1)], b = [0, s.cy - up[1] * (s.h / 2 - 1), s.cz - up[2] * (s.h / 2 - 1)];
+    pr.push({ ...seg(a, b, [0, -up[2], up[1]], s.D / 2, s.W / 2, Math.min(2.2, s.D / 2 - 0.2), P.COCCYX), g: 0 });
+    if (i === 0) for (const sx of [-1, 1]) {
+      pr.push(seg([sx * 3, s.cy + 1, s.cz - 1], [sx * (s.W / 2 + 5.5), s.cy - 0.5, s.cz - 1.5], [0, 1, 0], 2.4, 2.4, 1.6, P.COCCYX));   // rudimentary TPs
+      pr.push(ell([sx * 3.4, s.cy + s.h / 2 + 1.2, s.cz - s.D / 2 - 0.4], [1.8, 3, 1.8], P.COCCYX));                             // cornua
+    }
+  });
+  return { prims: pr, k: 1.6 };
+}
+
+// ------------------------------------------------------------------------------------------
+// 5. Assembly: build the column from the sacral base upwards, posterior body walls aligned.
+// ------------------------------------------------------------------------------------------
+function build() {
+  const lv = LEVELS.map((L, idx) => ({ ...scaled(L), idx }));
+  const byId = Object.fromEntries(lv.map((v) => [v.id, v]));
+  const discs = DISCS.map(([up, lo, h, w]) => ({ up, lo, h: h * LEN * (up[0] === "C" ? HCAL.cervical : HCAL.thoracolumbar), w }));   // up = cranial vertebra, lo = caudal
+  // C2 dimensions (female, scaled): body without dens, dens, facets
+  const C2 = { id: "C2", W: 17.5 * WID, D: 16 * WID, hp: 21 * LEN * HCAL.cervical, w: 0, hc: 21 * LEN * HCAL.cervical, densH: 15.5 * LEN, densR: 5.0 * WID, densZ: 0.8, densLean: 10, facetZ: -4 };
+  const S1 = { W: 48 * WID, D: 31 * WID };
+  // chain bottom-up: [L5-S1 disc, L5, L4-L5 disc, ..., C2-C3 disc, C2]
+  const order = [];
+  const ids = ["C2", ...lv.map((v) => v.id)];
+  for (let i = ids.length - 1; i >= 0; i--) {
+    const id = ids[i];
+    const below = i === ids.length - 1 ? "S1" : ids[i + 1];
+    order.push({ kind: "disc", d: discs.find((d) => d.up === id && d.lo === below) });
+    order.push({ kind: "vertebra", id });
+  }
+  const els = [];
+  const n = (a) => [Math.cos(a), Math.sin(a)];      // [y, z] of the end-plate normal tilted by a toward anterior
+  const t = (a) => [-Math.sin(a), Math.cos(a)];     // [y, z] anterior direction within the plate
+  // S1 superior end plate: centre from hip axis + pelvic tilt
+  const hip = [POSTURE.hipHeight, 0];
+  const pt = POSTURE.pelvicTilt * DEG;
+  const s1c = [hip[0] + POSTURE.hipToS1 * Math.cos(pt), hip[1] - POSTURE.hipToS1 * Math.sin(pt)];
+  let a = POSTURE.sacralSlope * DEG;
+  let Pc = [s1c[0] - t(a)[0] * S1.D / 2, s1c[1] - t(a)[1] * S1.D / 2];   // posterior corner of the S1 plate
+  const s1Plate = { center: s1c, post: Pc.slice(), angle: a };
+  let prevD = S1.D, prevW = S1.W;
+  for (const o of order) {
+    let D, W, hp, w, hc, v;
+    if (o.kind === "disc") {
+      const up = o.d.up === "C2" ? C2 : byId[o.d.up];
+      D = (prevD + up.D) / 2; W = (prevW + up.W) / 2; w = o.d.w; hc = o.d.h; hp = hc - (D / 2) * Math.tan(w * DEG);
+    } else {
+      v = o.id === "C2" ? C2 : byId[o.id];
+      D = v.D; W = v.W; w = v.w; hp = v.hp; hc = o.id === "C2" ? v.hc : hcOf(v);
+    }
+    const psi = a - (w * DEG) / 2;
+    const bc = [Pc[0] + t(a)[0] * D / 2, Pc[1] + t(a)[1] * D / 2];
+    const center = [bc[0] + n(psi)[0] * hc / 2, bc[1] + n(psi)[1] * hc / 2];
+    const el = { kind: o.kind, D, W, hc, hp, w, psi, o: [0, center[0], center[1]], postBottom: Pc.slice(), angleBottom: a };
+    if (o.kind === "disc") {
+      el.id = `D_${o.d.up}_${o.d.lo}`; el.name = `${o.d.up}–${o.d.lo} disc`; el.lo = o.d.lo; el.up = o.d.up;
+      el.region = o.d.up[0] === "C" ? "cervical" : o.d.up[0] === "T" ? "thoracic" : "lumbar";
+    } else {
+      el.id = o.id; el.name = o.id; el.v = v; el.region = o.id[0] === "C" ? "cervical" : o.id[0] === "T" ? "thoracic" : "lumbar";
+    }
+    els.push(el);
+    Pc = [Pc[0] + n(psi)[0] * hp, Pc[1] + n(psi)[1] * hp];
+    a = a - w * DEG;
+    el.postTop = Pc.slice(); el.angleTop = a;
+    prevD = D; prevW = W;
+  }
+  // Atlas on the axis
+  const c2 = els.find((e) => e.id === "C2");
+  const at = { lmX: 19.5 * WID, lmH: 16 * LEN, lmZ: 0, tpX: 36 * WID, postR: 29 * WID, archR: 13 * WID, archY: 1.5 };
+  {
+    // Seat the atlas: anterior arch just in front of the dens (atlanto-dental interval ~1 mm),
+    // lateral masses on the axis facets, ring extended by c1c2 about the atlanto-dental joint.
+    const lean = Math.tan(C2.densLean * DEG);
+    const facetTop = C2.hc / 2 - 1.0;
+    const y0 = facetTop + at.lmH / 2;                                  // C1 origin height (C2 local) before tilt
+    const yArch = y0 + at.archY;
+    const densZ = C2.densZ - (yArch - (C2.hc / 2 - 2)) * lean;         // dens centre at the arch level
+    const z0 = densZ + C2.densR + 1 - (at.archR - 3);                  // C1 origin z
+    const Q = [0, yArch, densZ];                                       // pivot: atlanto-dental joint
+    const tau = -POSTURE.c1c2 * DEG, c = Math.cos(tau), sn = Math.sin(tau);
+    const rot = (p) => { const ry = p[1] - Q[1], rz = p[2] - Q[2]; return [p[0], Q[1] + ry * c - rz * sn, Q[2] + ry * sn + rz * c]; };
+    // lift so the lowest lateral-mass corner rests on the facet
+    let low = 1e9;
+    for (const zz of [-10, 0, 10]) low = Math.min(low, rot([0, y0 - at.lmH / 2, z0 + zz])[1]);
+    const lift = facetTop - low - 0.4;
+    const oC2 = rot([0, y0, z0]); oC2[1] += lift;
+    const psi = c2.psi + tau;
+    els.push({ kind: "vertebra", id: "C1", name: "C1 (atlas)", region: "cervical", psi, o: toWorld(c2, oC2), atlas: at, hc: at.lmH, D: 30, W: 2 * at.tpX, c2Local: oC2 });
+  }
+  c2.name = "C2 (axis)"; c2.axis = C2;
+  // Sacrum: segments going down from the S1 plate, curving forward (kyphotic)
+  const SEG = [
+    { h: 27, W: 48, D: 31, L: 54, cw: 30, cd: 14, c: 2 }, { h: 22, W: 40, D: 25, L: 47, cw: 26, cd: 11, c: 6 },
+    { h: 18, W: 33, D: 19, L: 37, cw: 22, cd: 9, c: 10 }, { h: 14, W: 25, D: 14, L: 25, cw: 18, cd: 7, c: 10 },
+    { h: 11, W: 19, D: 11, L: 13, cw: 13, cd: 5, c: 0 },
+  ].map((s) => ({ ...s, h: s.h * LEN, W: s.W * WID, D: s.D * WID, L: s.L * WID, cw: s.cw * WID, cd: s.cd * WID }));
+  const sacPsi = s1Plate.angle;   // sacrum frame = S1 plate orientation, origin at S1 body centre
+  let ang = s1Plate.angle, pC = s1Plate.center;  // centre of the current segment's superior plate
+  const segW = [];
+  for (const s of SEG) {
+    const psi = ang - (s.c * DEG) / 2 * 0;     // segment axis
+    const center = [pC[0] - n(psi)[0] * s.h / 2, pC[1] - n(psi)[1] * s.h / 2];
+    segW.push({ ...s, psi, center });
+    const nb = ang - s.c * DEG;                  // next segment turns forward
+    pC = [center[0] - n(psi)[0] * (s.h / 2 + 1), center[1] - n(psi)[1] * (s.h / 2 + 1)];
+    // bend about the anterior edge so the anterior surface stays concave
+    ang = nb;
+  }
+  const sacO = [0, segW[0].center[0], segW[0].center[1]];
+  const sacEl = { kind: "sacrum", id: "S", name: "Sacrum (S1–S5, fused)", region: "sacral", psi: sacPsi, o: sacO, hc: SEG[0].h, D: SEG[0].D, W: 2 * SEG[0].L };
+  sacEl.segs = segW.map((s) => {
+    const l = toLocal(sacEl, [0, s.center[0], s.center[1]]);
+    return { ...s, cy: l[1], cz: l[2], psi: s.psi - sacPsi };
+  });
+  els.push(sacEl);
+  // Coccyx: four small segments continuing the curve forward
+  const CO = [{ h: 9, W: 12, D: 8, c: 12 }, { h: 7, W: 9, D: 6.5, c: 12 }, { h: 6, W: 7, D: 5.5, c: 10 }, { h: 5, W: 5.5, D: 4.5, c: 0 }]
+    .map((s) => ({ ...s, h: s.h * LEN, W: s.W * WID, D: s.D * WID }));
+  let cAng = ang, cP = [pC[0] - n(ang)[0] * 2.2, pC[1] - n(ang)[1] * 2.2];
+  const coW = [];
+  for (const s of CO) {
+    const center = [cP[0] - n(cAng)[0] * s.h / 2, cP[1] - n(cAng)[1] * s.h / 2];
+    coW.push({ ...s, psi: cAng, center });
+    cP = [center[0] - n(cAng)[0] * (s.h / 2 + 1.2), center[1] - n(cAng)[1] * (s.h / 2 + 1.2)];
+    cAng -= s.c * DEG;
+  }
+  const coEl = { kind: "coccyx", id: "Co", name: "Coccyx (Co1–Co4, fused)", region: "coccygeal", psi: coW[0].psi, o: [0, coW[0].center[0], coW[0].center[1]], hc: CO[0].h, D: CO[0].D, W: CO[0].W };
+  coEl.segs = coW.map((s) => { const l = toLocal(coEl, [0, s.center[0], s.center[1]]); return { ...s, cy: l[1], cz: l[2] }; });
+  els.push(coEl);
+  return { els, s1Plate, hip, subject: SUBJECT, posture: POSTURE };
+}
+function toWorld(el, l) {
+  const c = Math.cos(el.psi), s = Math.sin(el.psi);
+  return [el.o[0] + l[0], el.o[1] + l[1] * c - l[2] * s, el.o[2] + l[1] * s + l[2] * c];
+}
+function toLocal(el, w) {
+  const c = Math.cos(el.psi), s = Math.sin(el.psi), dy = w[1] - el.o[1], dz = w[2] - el.o[2];
+  return [w[0] - el.o[0], dy * c + dz * s, -dy * s + dz * c];
+}
+
+// Shapes for every element
+function shapeOf(el) {
+  if (el.kind === "disc") {
+    const heart = el.region === "thoracic" ? 1 : 0;
+    return disc({ W: el.W * 0.98, D: el.D * 0.98, hc: el.hc, w: el.w, back: el.region === "lumbar" ? 2 : el.region === "thoracic" ? 1.2 : 0.6, heart });
+  }
+  if (el.kind === "sacrum") return sacrum(el.segs);
+  if (el.kind === "coccyx") return coccyx(el.segs);
+  if (el.id === "C1") return atlas(el.atlas);
+  if (el.id === "C2") return axis(el.axis);
+  const v = el.v;
+  if (v.id[0] === "C") return cervical(v);
+  if (v.id[0] === "T") return thoracic(v, v.id === "T12");
+  return lumbar(v);
+}
+// Compile an element into a fast SDF + part lookup + local bounds
+function compile(el) {
+  const sh = shapeOf(el);
+  const body = sh.prims.filter((p) => p.g === 0), arch = sh.prims.filter((p) => p.g === 1), hole = sh.prims.filter((p) => p.g === 2);
+  const k = sh.k;
+  const sdf = (x, y, z) => {
+    let db = 1e9, da = 1e9;
+    for (let i = 0; i < body.length; i++) { const v = body[i].d(x, y, z); if (v < db) db = v; }
+    for (let i = 0; i < arch.length; i++) { const v = arch[i].d(x, y, z); if (v < da) da = v; }
+    let d = body.length && arch.length ? smin(db, da, k) : Math.min(db, da);
+    for (let i = 0; i < hole.length; i++) { const v = -hole[i].d(x, y, z); if (v > d) d = v; }
+    return d;
+  };
+  const partAt = (x, y, z) => {
+    for (const h of hole) if (h.part === 19 && Math.abs(h.d(x, y, z)) < 0.5) return 19;   // wall of a foramen: drawn dark
+    let best = 1e9, id = 0;
+    for (const p of sh.prims) { if (p.g === 2) continue; const v = p.d(x, y, z); if (v < best) { best = v; id = p.part; } }
+    return id;
+  };
+  const b = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (const p of sh.prims) { if (p.g === 2) continue; for (let i = 0; i < 3; i++) { b[i] = Math.min(b[i], p.box[i]); b[i + 3] = Math.max(b[i + 3], p.box[i + 3]); } }
+  for (let i = 0; i < 3; i++) { b[i] -= k + 1; b[i + 3] += k + 1; }
+  return { sdf, partAt, box: b };
+}
+
+const API = { SUBJECT, LEN, WID, HCAL, LEVELS, DISCS, POSTURE, ROM, P, PART_NAMES, build, compile, toWorld, toLocal, DEG };
+if (typeof module !== "undefined" && module.exports) module.exports = API;
+else root.SpineCore = API;
+})(typeof self !== "undefined" ? self : this);
+
+</script>
+<script id="render-src">
+// Spine renderer: orthographic, per-element ray casting into a shared z-buffer, then the approved pixel-art pass.
+// Works in the browser (global SpineRender) and in Node (module.exports).
+(function (root) {
+"use strict";
+
+const PALETTES = {
+  bone: ["#2b211b", "#5c4a3b", "#8e7860", "#bca98a", "#e0d4b8", "#faf4e3"],
+  disc: ["#2b211b", "#4b5157", "#7b878a", "#a7b2b0", "#cdd6d1", "#eef3ee"],
+};
+const STYLE = { lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, gap: 3, thresholds: [0.22, 0.45, 0.70, 0.92] };
+
+function rotView(yaw, pitch) {
+  const a = (yaw * Math.PI) / 180, b = (pitch * Math.PI) / 180, ca = Math.cos(a), sa = Math.sin(a), cb = Math.cos(b), sb = Math.sin(b);
+  return [[ca, 0, sa], [sb * sa, cb, -sb * ca], [-cb * sa, sb, cb * ca]];
+}
+const mul = (A, B) => A.map((r) => [0, 1, 2].map((j) => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
+const rotX = (p) => { const c = Math.cos(p), s = Math.sin(p); return [[1, 0, 0], [0, c, -s], [0, s, c]]; };
+
+// model = { els, comps } ; view = { yaw, pitch, mm, W, H, pivot, ss }
+function cast(model, view, onProgress, only) {
+  const { mm, W, H, ss } = view, SW = W * ss, SH = H * ss, N = SW * SH;
+  const Rv = rotView(view.yaw, view.pitch || 0);
+  const depth = new Float32Array(N).fill(Infinity), nx = new Float32Array(N), ny = new Float32Array(N), nz = new Float32Array(N);
+  const ao = new Float32Array(N), part = new Uint8Array(N), obj = new Uint8Array(N);
+  const Z0 = 3000, e = 0.1;
+  model.els.forEach((el, k) => {
+    if (only && !only.includes(k)) return;
+    const comp = model.comps[k], sdf = comp.sdf, b = comp.box;
+    const M = mul(Rv, rotX(el.psi));
+    const d0 = [el.o[0] - view.pivot[0], el.o[1] - view.pivot[1], el.o[2] - view.pivot[2]];
+    const Ov = [0, 1, 2].map((i) => Rv[i][0] * d0[0] + Rv[i][1] * d0[1] + Rv[i][2] * d0[2]);
+    let i0 = 1e9, i1 = -1e9, j0 = 1e9, j1 = -1e9;
+    for (const x of [b[0], b[3]]) for (const y of [b[1], b[4]]) for (const z of [b[2], b[5]]) {
+      const vx = Ov[0] + M[0][0] * x + M[0][1] * y + M[0][2] * z, vy = Ov[1] + M[1][0] * x + M[1][1] * y + M[1][2] * z;
+      const si = (vx / mm + W / 2) * ss, sj = (H / 2 - vy / mm) * ss;
+      i0 = Math.min(i0, si); i1 = Math.max(i1, si); j0 = Math.min(j0, sj); j1 = Math.max(j1, sj);
+    }
+    i0 = Math.max(0, Math.floor(i0)); i1 = Math.min(SW - 1, Math.ceil(i1)); j0 = Math.max(0, Math.floor(j0)); j1 = Math.min(SH - 1, Math.ceil(j1));
+    const ldx = -M[2][0], ldy = -M[2][1], ldz = -M[2][2];          // ray direction in local space
+    for (let j = j0; j <= j1; j++) {
+      const vy = (H / 2 - (j + 0.5) / ss) * mm;
+      for (let i = i0; i <= i1; i++) {
+        const vx = ((i + 0.5) / ss - W / 2) * mm;
+        const qx = vx - Ov[0], qy = vy - Ov[1], qz = Z0 - Ov[2];
+        const ox = M[0][0] * qx + M[1][0] * qy + M[2][0] * qz, oy = M[0][1] * qx + M[1][1] * qy + M[2][1] * qz, oz = M[0][2] * qx + M[1][2] * qy + M[2][2] * qz;
+        // slab test against the local bounding box
+        let t0 = 0, t1 = 1e9, ok = true;
+        for (const [o, d, lo, hi] of [[ox, ldx, b[0], b[3]], [oy, ldy, b[1], b[4]], [oz, ldz, b[2], b[5]]]) {
+          if (Math.abs(d) < 1e-9) { if (o < lo || o > hi) { ok = false; break; } continue; }
+          let ta = (lo - o) / d, tb = (hi - o) / d; if (ta > tb) { const tt = ta; ta = tb; tb = tt; }
+          if (ta > t0) t0 = ta; if (tb < t1) t1 = tb; if (t0 > t1) { ok = false; break; }
+        }
+        if (!ok) continue;
+        const idx = j * SW + i;
+        if (t0 >= depth[idx]) continue;
+        let t = t0, hit = false;
+        for (let s = 0; s < 200 && t < t1; s++) {
+          const d = sdf(ox + ldx * t, oy + ldy * t, oz + ldz * t);
+          if (d < 0.04) { hit = true; break; }
+          t += Math.max(d * 0.9, 0.02);
+        }
+        if (!hit || t >= depth[idx]) continue;
+        const x = ox + ldx * t, y = oy + ldy * t, z = oz + ldz * t;
+        const a1 = sdf(x + e, y - e, z - e), a2 = sdf(x - e, y - e, z + e), a3 = sdf(x - e, y + e, z - e), a4 = sdf(x + e, y + e, z + e);
+        let gx = a1 - a2 - a3 + a4, gy = -a1 - a2 + a3 + a4, gz = -a1 + a2 - a3 + a4;
+        const gl = Math.hypot(gx, gy, gz) || 1; gx /= gl; gy /= gl; gz /= gl;
+        let occ = 0, wgt = 1;
+        for (const dd of [0.8, 1.8, 3.2]) { occ += (dd - Math.min(sdf(x + gx * dd, y + gy * dd, z + gz * dd), dd)) / dd * wgt; wgt *= 0.6; }
+        depth[idx] = t;
+        nx[idx] = M[0][0] * gx + M[0][1] * gy + M[0][2] * gz;
+        ny[idx] = M[1][0] * gx + M[1][1] * gy + M[1][2] * gz;
+        nz[idx] = M[2][0] * gx + M[2][1] * gy + M[2][2] * gz;
+        ao[idx] = Math.max(0, Math.min(1, 1 - 0.75 * occ));
+        part[idx] = comp.partAt(x, y, z);
+        obj[idx] = k + 1;
+      }
+    }
+    if (onProgress) onProgress((k + 1) / model.els.length);
+  });
+  return { W, H, ss, depth, nx, ny, nz, ao, part, obj };
+}
+
+// labels: 0 empty, 1 outline, 2 line, 3 shade, 4 mid, 5 light, 6 hi ; per pixel also obj (element index+1) and part
+function stylise(g, model, st = STYLE) {
+  const { W, H, ss } = g, SW = W * ss, n = W * H;
+  const th = (st.lightDir * Math.PI) / 180, ph = (st.lightFront * Math.PI) / 180;
+  const L = [Math.cos(ph) * Math.cos(th), Math.cos(ph) * Math.sin(th), Math.sin(ph)];
+  const cnt = new Uint16Array(n), shSum = new Float32Array(n), dSum = new Float32Array(n);
+  const objOf = new Uint8Array(n), partOf = new Uint8Array(n);
+  const ov = new Map();
+  for (let j = 0; j < H * ss; j++) for (let i = 0; i < SW; i++) {
+    const idx = j * SW + i; if (!g.obj[idx]) continue;
+    const lam = Math.max(0, g.nx[idx] * L[0] + g.ny[idx] * L[1] + g.nz[idx] * L[2]);
+    const aoT = 1 - st.aoStr * 0.7 * (1 - g.ao[idx]);
+    const sh = (st.ambient + 0.76 * Math.pow(lam, 1.25) + 0.10 * Math.max(0, g.nz[idx])) * aoT * st.exposure;
+    const p = ((j / ss) | 0) * W + ((i / ss) | 0);
+    cnt[p]++; shSum[p] += sh; dSum[p] += g.depth[idx];
+    const key = p * 65536 + g.obj[idx] * 256 + g.part[idx]; ov.set(key, (ov.get(key) || 0) + 1);
+  }
+  // majority element/part per pixel
+  const best = new Uint16Array(n);
+  for (const [key, c] of ov) { const p = Math.floor(key / 65536); if (c > best[p]) { best[p] = c; objOf[p] = (key >> 8) & 255; partOf[p] = key & 255; } }
+  const cover = new Uint8Array(n), depth = new Float32Array(n);
+  let tone = new Int8Array(n).fill(-1);
+  const TH = st.thresholds;
+  for (let p = 0; p < n; p++) {
+    if (cnt[p] / (ss * ss) < 0.45) continue;
+    cover[p] = 1; depth[p] = dSum[p] / cnt[p];
+    const s = shSum[p] / cnt[p]; let t = 0; while (t < 4 && s >= TH[t]) t++; tone[p] = t;
+  }
+  const at = (arr, x, y, def) => (x < 0 || y < 0 || x >= W || y >= H ? def : arr[y * W + x]);
+  // clusters: 3x3 majority (same element only), then remove lone pixels
+  for (let it = 0; it < 3; it++) {
+    const out = tone.slice();
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const p = y * W + x, t = tone[p]; if (t < 0) continue;
+      const c = [0, 0, 0, 0, 0], o = objOf[p];
+      if (it === 0) {
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const q = p + dy * W + dx, v = at(tone, x + dx, y + dy, -1); if (v >= 0 && objOf[q] === o) c[v]++; }
+        let b = 0; for (let k = 1; k < 5; k++) if (c[k] > c[b]) b = k;
+        if (c[b] >= 5) out[p] = b;
+      } else {
+        let same = false, any = false;
+        for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) { const v = at(tone, x + dx, y + dy, -1); if (v >= 0) { c[v]++; any = true; if (v === t) same = true; } }
+        if (any && !same) { let b = 0; for (let k = 1; k < 5; k++) if (c[k] > c[b]) b = k; out[p] = b; }
+      }
+    }
+    tone = out;
+  }
+  let lab = new Uint8Array(n);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const p = y * W + x; if (!cover[p]) continue;
+    lab[p] = tone[p] + 2;
+    let edge = false, inner = false;
+    for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+      if (!at(cover, x + dx, y + dy, 0)) edge = true;
+      else if (at(depth, x + dx, y + dy, 0) - depth[p] > st.gap) inner = true;
+    }
+    if (edge) lab[p] = 1; else if (inner) lab[p] = tone[p] >= 1 ? 2 : 1;
+  }
+  // foramen walls read as holes: darkest tone
+  for (let p = 0; p < n; p++) if (lab[p] >= 2 && partOf[p] === 19) lab[p] = 2;
+  // rim light on top edges, step down above bottom edges
+  const isEdge = (x, y) => { const v = at(lab, x, y, 0); return v === 1 || v === 0; };
+  { const out = lab.slice();
+    for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      const p = y * W + x, v = lab[p]; if (v < 2) continue; const ti = v - 2;
+      if (isEdge(x, y - 1) && lab[p - 1] !== 0 && (ti === 1 || ti === 2)) out[p] = v + 1;
+      else if (isEdge(x, y + 1) && ti >= 2 && lab[p - W] >= 2) out[p] = v - 1;
+    }
+    lab = out; }
+  // interior lines are strokes, never dots
+  for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+    const p = y * W + x; if (lab[p] !== 2) continue; let ok = false;
+    for (let dy = -1; dy <= 1 && !ok; dy++) for (let dx = -1; dx <= 1; dx++) { if (!dx && !dy) continue; const v = lab[p + dy * W + dx]; if (v === 1 || v === 2) { ok = true; break; } }
+    if (!ok) lab[p] = Math.max(1, tone[p]) + 2;
+  }
+  return { W, H, lab, obj: objOf, part: partOf };
+}
+
+const hexRgb = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+function paint(st, model, palettes = PALETTES) {
+  const { W, H, lab, obj } = st, rgba = new Uint8ClampedArray(W * H * 4);
+  const pals = { bone: palettes.bone.map(hexRgb), disc: palettes.disc.map(hexRgb) };
+  for (let p = 0; p < W * H; p++) {
+    const v = lab[p]; if (!v) continue;
+    const el = model.els[obj[p] - 1];
+    const pal = el && el.kind === "disc" ? pals.disc : pals.bone;
+    const c = v === 1 ? pals.bone[0] : pal[v - 1];
+    rgba[p * 4] = c[0]; rgba[p * 4 + 1] = c[1]; rgba[p * 4 + 2] = c[2]; rgba[p * 4 + 3] = 255;
+  }
+  return rgba;
+}
+
+const VIEWS = [
+  { id: "front", name: "Front", yaw: 0 }, { id: "front-right", name: "Front 3/4 right", yaw: 45 },
+  { id: "right", name: "Right side", yaw: 90 }, { id: "back-right", name: "Back 3/4 right", yaw: 135 },
+  { id: "back", name: "Back", yaw: 180 }, { id: "back-left", name: "Back 3/4 left", yaw: 225 },
+  { id: "left", name: "Left side", yaw: 270 }, { id: "front-left", name: "Front 3/4 left", yaw: 315 },
+];
+const FRAME = { W: 800, H: 800, mm: 1, pivot: [0, 1302, -25] };
+
+function project(p, view) {
+  const Rv = rotView(view.yaw, view.pitch || 0), d = [p[0] - view.pivot[0], p[1] - view.pivot[1], p[2] - view.pivot[2]];
+  const vx = Rv[0][0] * d[0] + Rv[0][1] * d[1] + Rv[0][2] * d[2], vy = Rv[1][0] * d[0] + Rv[1][1] * d[1] + Rv[1][2] * d[2];
+  return [vx / view.mm + view.W / 2, view.H / 2 - vy / view.mm];
+}
+const API = { PALETTES, STYLE, VIEWS, FRAME, cast, stylise, paint, rotView, project };
+if (typeof module !== "undefined" && module.exports) module.exports = API;
+else root.SpineRender = API;
+})(typeof self !== "undefined" ? self : this);
+
+</script>
+<script>
+// Spine Views: pick one of the eight fixed camera angles; the column is rendered in the browser from code.
+(() => {
+const $ = (id) => document.getElementById(id);
+const C = window.SpineCore, R = window.SpineRender;
+const built = C.build();
+const model = { els: built.els, comps: built.els.map(C.compile) };
+const REGION_COLOR = { cervical: "#d9a441", thoracic: "#5aa6c9", lumbar: "#8b7fd1", sacral: "#5fb38a", coccygeal: "#d9708a" };
+const S = { view: "right", zoom: "fit", bg: "checker", labels: true, guides: true, regions: false };
+try { Object.assign(S, JSON.parse(localStorage.getItem("spine-views") || "{}")); } catch (e) { /* no storage */ }
+const save = () => { try { localStorage.setItem("spine-views", JSON.stringify(S)); } catch (e) { /* ignore */ } };
+
+// ---------- workers: each casts a share of the 49 elements; the main thread merges the z-buffers ----------
+const SRC = $("core-src").textContent + "\n" + $("render-src").textContent + `
+  let M = null;
+  self.onmessage = (ev) => {
+    const q = ev.data;
+    if (!M) { const b = SpineCore.build(); M = { els: b.els, comps: b.els.map(SpineCore.compile) }; }
+    const g = SpineRender.cast(M, q.view, (p) => self.postMessage({ id: q.id, progress: p }), q.only);
+    self.postMessage({ id: q.id, g }, [g.depth.buffer, g.nx.buffer, g.ny.buffer, g.nz.buffer, g.ao.buffer, g.part.buffer, g.obj.buffer]);
+  };`;
+const nW = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1));
+let workers = [];
+try { const url = URL.createObjectURL(new Blob([SRC], { type: "text/javascript" })); for (let i = 0; i < nW; i++) workers.push(new Worker(url)); }
+catch (e) { workers = []; }
+// share elements by rough cost (bounding-box area)
+const cost = model.comps.map((c) => (c.box[3] - c.box[0] + c.box[4] - c.box[1]) * (c.box[4] - c.box[1] + c.box[5] - c.box[2]));
+const shares = Array.from({ length: Math.max(1, workers.length) }, () => ({ k: [], c: 0 }));
+cost.map((c, k) => [c, k]).sort((a, b) => b[0] - a[0]).forEach(([c, k]) => { const s = shares.reduce((a, b) => (a.c <= b.c ? a : b)); s.k.push(k); s.c += c; });
+
+const cache = new Map(); let jobId = 0;
+function geometry(viewId, onProgress) {
+  if (cache.has(viewId)) return Promise.resolve(cache.get(viewId));
+  const v = R.VIEWS.find((x) => x.id === viewId);
+  const view = { ...R.FRAME, yaw: v.yaw, pitch: 0, ss: 3 };
+  if (!workers.length) return new Promise((res) => setTimeout(() => { const g = R.cast(model, view); cache.set(viewId, g); res(g); }, 20));
+  const id = ++jobId, prog = new Array(workers.length).fill(0);
+  return Promise.all(workers.map((w, i) => new Promise((res) => {
+    const h = (ev) => { if (ev.data.id !== id) return; if (ev.data.g) { w.removeEventListener("message", h); res(ev.data.g); } else { prog[i] = ev.data.progress; onProgress(prog.reduce((a, b) => a + b, 0) / prog.length); } };
+    w.addEventListener("message", h); w.postMessage({ id, view, only: shares[i].k });
+  }))).then((parts) => {
+    const g = parts[0];
+    for (let p = 1; p < parts.length; p++) { const o = parts[p]; for (let i = 0; i < g.depth.length; i++) if (o.depth[i] < g.depth[i]) { g.depth[i] = o.depth[i]; g.nx[i] = o.nx[i]; g.ny[i] = o.ny[i]; g.nz[i] = o.nz[i]; g.ao[i] = o.ao[i]; g.part[i] = o.part[i]; g.obj[i] = o.obj[i]; } }
+    cache.set(viewId, g); return g;
+  });
+}
+
+// ---------- drawing ----------
+const styled = new Map();
+let current = null, hoverObj = 0;
+function zoomFor() {
+  if (S.zoom !== "fit") return +S.zoom;
+  const st = $("stage"); return Math.max(1, Math.floor(Math.min((st.clientWidth - 40) / 800, (st.clientHeight - 60) / 800)));
+}
+function paintRegions(st) {
+  const rgba = R.paint(st, model);
+  if (!S.regions) return rgba;
+  const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+  for (let p = 0; p < st.W * st.H; p++) {
+    if (!st.lab[p] || st.lab[p] === 1) continue;
+    const el = model.els[st.obj[p] - 1]; const c = hex(el.kind === "disc" ? "#a7b2b0" : REGION_COLOR[el.region]);
+    const k = [0, 0, 0.45, 0.62, 0.8, 0.95, 1.08][st.lab[p]];
+    rgba[p * 4] = c[0] * k; rgba[p * 4 + 1] = c[1] * k; rgba[p * 4 + 2] = c[2] * k;
+  }
+  return rgba;
+}
+function draw() {
+  if (!current) return;
+  const st = current, z = zoomFor(), cv = $("cv");
+  const off = document.createElement("canvas"); off.width = st.W; off.height = st.H;
+  const rgba = paintRegions(st);
+  if (hoverObj) for (let p = 0; p < st.W * st.H; p++) if (st.lab[p] && st.obj[p] !== hoverObj) { rgba[p * 4 + 3] = 255; rgba[p * 4] *= 0.55; rgba[p * 4 + 1] *= 0.55; rgba[p * 4 + 2] *= 0.6; }
+  off.getContext("2d").putImageData(new ImageData(rgba, st.W, st.H), 0, 0);
+  const dpr = 1; cv.width = Math.round(st.W * z * dpr); cv.height = Math.round(st.H * z * dpr);
+  cv.style.width = st.W * z + "px"; cv.style.height = st.H * z + "px";
+  const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
+  if (S.bg === "checker") { const c = 16; ctx.fillStyle = "#3b4149"; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = "#434a53"; for (let y = 0; y < cv.height; y += c) for (let x = (y / c) % 2 ? c : 0; x < cv.width; x += 2 * c) ctx.fillRect(x, y, c, c); }
+  else { ctx.fillStyle = { dark: "#121417", light: "#eef0f2", skin: "#c99a7c" }[S.bg]; ctx.fillRect(0, 0, cv.width, cv.height); }
+  ctx.drawImage(off, 0, 0, cv.width, cv.height);
+  if (S.guides) {
+    ctx.save(); ctx.strokeStyle = "rgba(124,196,216,0.6)"; ctx.setLineDash([6, 6]); ctx.beginPath();
+    ctx.moveTo(0, cv.height / 2 + 0.5); ctx.lineTo(cv.width, cv.height / 2 + 0.5); ctx.moveTo(cv.width / 2 + 0.5, 0); ctx.lineTo(cv.width / 2 + 0.5, cv.height); ctx.stroke(); ctx.restore();
+  }
+  drawLabels(z);
+}
+function drawLabels(z) {
+  const box = $("lbl-layer"); box.innerHTML = ""; if (!S.labels) return;
+  const v = R.VIEWS.find((x) => x.id === S.view), view = { ...R.FRAME, yaw: v.yaw, pitch: 0 };
+  const side = Math.sin((v.yaw * Math.PI) / 180);           // which way the column's front faces on screen
+  model.els.forEach((el) => {
+    if (el.kind === "disc") return;
+    const p = R.project(el.o, view);
+    const d = document.createElement("span"); d.className = "lbl"; d.textContent = el.id;
+    const left = Math.abs(side) > 0.3 ? side > 0 : true;    // put labels in front of the bodies in side views
+    d.style.top = p[1] * z + "px";
+    if (left && Math.abs(side) > 0.3) { d.style.left = (p[0] + 44) * z + "px"; d.classList.add("r"); }
+    else { d.style.left = (p[0] - 50) * z + "px"; d.classList.add("l"); }
+    box.appendChild(d);
+  });
+}
+let token = 0;
+async function render() {
+  save(); syncControls();
+  const t = ++token; $("busy").hidden = false; $("busy").textContent = "Rendering…";
+  const g = await geometry(S.view, (p) => { if (t === token) $("busy").textContent = `Rendering… ${Math.round(p * 100)}%`; });
+  if (t !== token) return;
+  if (!styled.has(S.view)) styled.set(S.view, R.stylise(g, model));
+  current = styled.get(S.view); $("busy").hidden = true;
+  const v = R.VIEWS.find((x) => x.id === S.view);
+  $("caption").textContent = `${v.name} · yaw ${v.yaw}° · eye level · 800 × 800 px frame, 1 px = 1 mm`;
+  draw();
+  // warm the other views in the background
+  setTimeout(() => R.VIEWS.forEach((x) => geometry(x.id, () => {})), 300);
+}
+
+// ---------- hover readout ----------
+$("cv").addEventListener("mousemove", (e) => {
+  if (!current) return;
+  const r = e.target.getBoundingClientRect(), x = Math.floor(((e.clientX - r.left) / r.width) * current.W), y = Math.floor(((e.clientY - r.top) / r.height) * current.H);
+  if (x < 0 || y < 0 || x >= current.W || y >= current.H) return;
+  const p = y * current.W + x, o = current.obj[p];
+  const h = Math.round(R.FRAME.pivot[1] + (current.H / 2 - y - 0.5) * R.FRAME.mm);
+  let text = `pixel ${x}, ${y} · ${h} mm above the floor`;
+  if (current.lab[p] && o) { const el = model.els[o - 1]; text = `${el.name} · ${C.PART_NAMES[current.part[p]] || ""} · ` + text; }
+  $("status").textContent = text;
+  const ho = current.lab[p] ? o : 0;
+  if (ho !== hoverObj) { hoverObj = ho; draw(); }
+});
+$("cv").addEventListener("mouseleave", () => { hoverObj = 0; draw(); $("status").textContent = defaultStatus; });
+const defaultStatus = `24 vertebrae, 23 discs, sacrum and coccyx · ${built.els.length} separately editable elements · hover to identify`;
+$("status").textContent = defaultStatus;
+
+// ---------- controls ----------
+function seg(id, items, key) {
+  const el = $(id); el.innerHTML = "";
+  items.forEach(([val, label]) => { const b = document.createElement("button"); b.type = "button"; b.dataset.val = val; b.textContent = label;
+    b.addEventListener("click", () => { S[key] = val; if (key === "view") render(); else { save(); syncControls(); draw(); } }); el.appendChild(b); });
+}
+seg("views", R.VIEWS.map((v) => [v.id, v.name]), "view");
+seg("zoom", [["fit", "Fit"], ["1", "1×"], ["2", "2×"], ["3", "3×"], ["4", "4×"]], "zoom");
+seg("bg", [["checker", "Clear"], ["dark", "Dark"], ["light", "Light"], ["skin", "Skin"]], "bg");
+for (const k of ["labels", "guides", "regions"]) $(k).addEventListener("change", () => { S[k] = $(k).checked; save(); draw(); });
+function syncControls() {
+  for (const id of ["views", "zoom", "bg"]) { const key = { views: "view", zoom: "zoom", bg: "bg" }[id]; $(id).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.val === String(S[key])))); }
+  for (const k of ["labels", "guides", "regions"]) $(k).checked = S[k];
+}
+new ResizeObserver(() => { if (S.zoom === "fit") draw(); }).observe($("stage"));
+
+// ---------- export: transparent PNG of the current view at 1 px = 1 mm ----------
+let downloads = null;
+const inClaude = () => !!(window.claude && typeof window.claude.use === "function");
+(function initDl() { let n = 0; const tick = () => { if (inClaude()) { window.claude.use("downloads").then((d) => { downloads = d; if (!d) $("save").hidden = true; }).catch(() => {}); return; } if (++n < 6) setTimeout(tick, 500); }; tick(); })();
+$("save").addEventListener("click", async () => {
+  if (!current) return;
+  const off = document.createElement("canvas"); off.width = current.W; off.height = current.H;
+  off.getContext("2d").putImageData(new ImageData(R.paint(current, model), current.W, current.H), 0, 0);
+  const blob = await new Promise((res) => off.toBlob(res, "image/png")), name = `spine_${S.view}.png`;
+  if (downloads) { try { await downloads.save({ filename: name, data: blob }); } catch (e) { /* declined or unavailable */ } }
+  else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); }
+});
+render();
+})();
+
+</script>
+</body>
+</html>
