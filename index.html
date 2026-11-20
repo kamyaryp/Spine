@@ -33,13 +33,13 @@ header small { color: var(--muted); }
 .btn { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
 .btn:hover { border-color: var(--muted); }
 
-/* level stepper */
+/* main tabs */
 .levels { grid-column: 1 / -1; display: flex; gap: 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
 .levels button { display: grid; gap: 1px; text-align: left; border: 0; border-right: 1px solid var(--line); background: transparent; padding: 9px 18px 8px; cursor: pointer; min-width: 150px; position: relative; }
 .levels button b { font-family: var(--f-display); font-weight: 500; font-size: 15px; }
 .levels button span { color: var(--muted); font-size: 12px; }
-.levels button[aria-pressed="true"] { background: var(--panel); }
-.levels button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
+.levels button[aria-selected="true"] { background: var(--panel); }
+.levels button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
 .levels button:disabled { cursor: default; opacity: 0.45; }
 
 .rail { grid-row: 3 / 5; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding-bottom: 18px; }
@@ -73,6 +73,15 @@ select { background: var(--raise); border: 1px solid var(--line); border-radius:
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .legend[hidden] { display: none; }
 [data-level="1"] .only2, [data-level="2"] .only1 { display: none; }
+[data-tab="body"] .skel, [data-tab="clothing"] .skel { display: none; }
+[data-tab="skeleton"] .empty { display: none; }
+.empty { max-width: 460px; margin: 60px auto; padding: 22px 24px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+.empty b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
+.sub-h { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ribs { grid-template-columns: repeat(6, 1fr); }
+.ribs button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
+#ribcage-state { font-size: 12px; color: var(--muted); margin: 0; }
+.stack { display: grid; gap: 6px; }
 
 .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
@@ -104,17 +113,26 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 </style>
 </head>
 <body>
-<div class="app" id="app" data-level="1">
+<div class="app" id="app" data-tab="skeleton" data-level="2">
   <header>
-    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm · one 3D model per level, rendered to pixel art in the browser</small>
+    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm, 78 kg · one 3D model, rendered to pixel art in the browser</small>
     <div class="spacer"></div>
-    <button class="btn" type="button" id="save">Save PNG</button>
-    <button class="btn" type="button" id="copy">Copy style JSON</button>
+    <button class="btn skel" type="button" id="save">Save PNG</button>
+    <button class="btn skel" type="button" id="copy">Copy style JSON</button>
   </header>
-  <nav class="levels" id="levels" aria-label="Build level"></nav>
+  <nav class="levels" id="tabs" role="tablist" aria-label="Character"></nav>
 
   <aside class="rail" aria-label="Controls">
-    <section class="group only2" id="pose-group">
+    <section class="group skel">
+      <h2>Skeleton</h2>
+      <div class="seg" id="mode" role="group" aria-label="Show"></div>
+      <div class="only2 stack">
+        <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine (vertebrae, discs, sacrum, coccyx)</label>
+        <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage (12 rib pairs, costal cartilages, sternum)</label>
+        <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+      </div>
+    </section>
+    <section class="group only2 skel" id="pose-group">
       <h2>Pose <span id="pose-state">neutral</span></h2>
       <div class="chips" id="demos" role="group" aria-label="Demonstration poses"></div>
       <div class="row"><button class="btn primary" type="button" id="play">Play</button><button class="btn" type="button" id="to-neutral">Reset to neutral</button></div>
@@ -123,18 +141,31 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <div id="root-sliders"></div>
       <details id="seg-details"><summary>Segment angles</summary><div id="seg-table"></div></details>
       <p class="hint">Regional controls are spread over the motion segments by their measured share. Limits: 85 % of mean active ranges; combined motions share one envelope.</p>
+      <p id="ribcage-state"></p>
     </section>
-    <section class="group only1">
+    <section class="group only2 skel">
+      <h2>Clavicles <span>sternoclavicular joint</span></h2>
+      <label class="check" for="clav-link"><input type="checkbox" id="clav-link"> Move both together</label>
+      <div id="clav-sliders"></div>
+      <p class="hint">Each clavicle hangs from the manubrium, never from the spine. Limits: 85 % of textbook ranges; one envelope per side.</p>
+    </section>
+    <section class="group only1 skel">
       <h2>Bone <span id="bone-name"></span></h2>
-      <div class="chips bones" id="bones" role="group" aria-label="Bone"></div>
-      <p class="hint">Any single element of the column, in its own upright frame. L3 is the approved style study.</p>
+      <div class="sub-h">Spine</div>
+      <div class="chips bones" id="bones" role="group" aria-label="Vertebra"></div>
+      <div class="sub-h">Ribs</div>
+      <div class="seg" id="rib-side" role="group" aria-label="Rib side"></div>
+      <div class="chips ribs" id="ribs" role="group" aria-label="Rib"></div>
+      <div class="sub-h">Sternum and clavicles</div>
+      <div class="chips" id="girdle" role="group" aria-label="Sternum and clavicles"></div>
+      <p class="hint">Any single bone in its own frame. L3 is the approved style study.</p>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Camera angle</h2>
       <div class="chips" id="views" role="group" aria-label="View"></div>
       <p class="hint">Fixed eye-level angles about one pivot: a point keeps the same screen height in every view.</p>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Pixel scale <span>mm per pixel</span></h2>
       <div class="seg" id="mm" role="group" aria-label="Millimetres per pixel"></div>
       <h2>Zoom</h2>
@@ -142,14 +173,14 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <h2>Background</h2>
       <div class="seg" id="bg" role="group" aria-label="Background"></div>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Overlays</h2>
       <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
-      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Vertebra labels</label>
+      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Labels (vertebrae, rib numbers)</label>
       <div class="seg" id="colorby" role="group" aria-label="Colour by"></div>
       <div class="legend" id="legend" hidden></div>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Light</h2>
       <div class="range"><label for="lightDir">Direction</label><input type="range" id="lightDir" min="0" max="355" step="1"><output id="lightDir-out"></output></div>
       <div class="range"><label for="lightFront">Toward viewer</label><input type="range" id="lightFront" min="0" max="85" step="1"><output id="lightFront-out"></output></div>
@@ -157,7 +188,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <div class="range"><label for="aoStr">Crevice shadow</label><input type="range" id="aoStr" min="0" max="1.5" step="0.05"><output id="aoStr-out"></output></div>
       <div class="range"><label for="exposure">Exposure</label><input type="range" id="exposure" min="0.6" max="1.5" step="0.01"><output id="exposure-out"></output></div>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Pixel rules</h2>
       <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
       <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
@@ -165,19 +196,20 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
       <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Palette</h2>
       <label class="range" for="preset" style="grid-template-columns:96px 1fr"><span style="color:var(--muted)">Bone preset</span><select id="preset"></select></label>
       <div class="pal" id="pal-bone" aria-label="Bone colours"></div>
-      <h2>Disc colours</h2>
+      <h2>Disc and cartilage colours</h2>
       <div class="pal" id="pal-disc" aria-label="Disc colours"></div>
       <button class="btn" type="button" id="reset">Reset all settings</button>
     </section>
   </aside>
 
   <main id="stage"><div id="busy" hidden></div>
-    <div class="frame"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
-    <div id="caption"></div>
+    <div class="frame skel"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
+    <div id="caption" class="skel"></div>
+    <div class="empty" role="status"><b>Nothing here yet</b>The body and the clothing are built around the finished skeleton in later stages. This tab keeps their place; no artwork has been made for it.</div>
   </main>
   <div class="statusbar"><div id="status"></div></div>
 </div>
@@ -789,7 +821,11 @@ function shapeOf(el) {
   return lumbar(v);
 }
 // Compile an element into a fast SDF + part lookup + local bounds
+// Other skeletal modules (thorax, later limbs) register their own compilers for new element kinds.
+const EXT = {};
+function registerKind(kind, fn) { EXT[kind] = fn; }
 function compile(el) {
+  if (EXT[el.kind]) return EXT[el.kind](el);
   const sh = shapeOf(el);
   const body = sh.prims.filter((p) => p.g === 0), arch = sh.prims.filter((p) => p.g === 1), hole = sh.prims.filter((p) => p.g === 2);
   const k = sh.k;
@@ -813,7 +849,7 @@ function compile(el) {
   return { sdf, partAt, box: b };
 }
 
-const API = { SUBJECT, LEN, WID, HCAL, LEVELS, DISCS, POSTURE, ROM, P, PART_NAMES, build, compile, toWorld, toLocal, DEG };
+const API = { SUBJECT, LEN, WID, HCAL, LEVELS, DISCS, POSTURE, ROM, P, PART_NAMES, build, compile, registerKind, toWorld, toLocal, DEG };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.SpineCore = API;
 })(typeof self !== "undefined" ? self : this);
@@ -850,6 +886,9 @@ const REFS = {
   pearcy84b: "Pearcy & Tibrewal 1984, Spine 9(6): biplanar radiography, active axial rotation and lateral bending. About 2° rotation per level (L5-S1 less); bending about 5–6° per level, less at L4-5 and least at L5-S1.",
   fujimori07: "Fujimori et al. 2007, Eur Spine J: lumbar kinematics in trunk rotation, in vivo 3D MRI. 1.2–1.7° per segment at 45° trunk rotation; coupled bending opposite at L1/2–L4/5, same side at L5/S1.",
   whitePanjabi: "White & Panjabi 1990, Clinical Biomechanics of the Spine: representative (largely cadaveric) segmental ranges; used only as a passive upper reference.",
+  neumann: "Neumann, Kinesiology of the Musculoskeletal System (3rd ed.): sternoclavicular joint ranges ≈ 45° elevation, 10° depression, 15–20° protraction, 15–30° retraction, 20–35° posterior rotation.",
+  ludewig09: "Ludewig et al. 2009, J Bone Joint Surg Am 91(2): in vivo bone-pin kinematics; resting clavicle ≈ 20° retracted and ≈ 6° elevated; with arm elevation it retracts 15–30°, elevates ≈ 10° and rotates posteriorly ≈ 30°.",
+  wilke17: "Wilke et al. 2017, PLoS One (PMC5453693): in vitro thoracic segments with vs without the rib cage; the rib cage stiffens the segments, most in axial rotation (more than half the range). In vivo values above already include the intact rib cage.",
 };
 
 // share = this segment's part of the region's primary motion (deg, one direction, active in vivo)
@@ -901,9 +940,15 @@ const SETTINGS = {
   envelope: 2,               // combined-motion envelope per region: |(f, b, r) / limits|_p <= 1 with p = 2 (an ellipsoid)
   root: { tilt: 15, obliquity: 10, rotation: 10 },   // whole-sacrum (pelvis) control limits; sacrum fixed by default
   hipPivot: null,            // filled by the rig from the anatomy (hip axis)
+  // rib cage (thorax rig): ribs turn on their costovertebral axes, the sternum floats on the true-rib cartilages
+  ribcage: { costovertebralMax: 10, cartilageStretchWarn: 0.06 },
 };
+// Sternoclavicular joint: clavicle relative to the manubrium, degrees from the resting position (one direction).
+// Controls reach SETTINGS.conservative of these. Anterior rotation is not modelled (posterior rotation returns to 0).
+const SC = { elevation: 45, depression: 10, protraction: 17.5, retraction: 22.5, posteriorRotation: 27.5,
+  refs: ["neumann", "ludewig09"], approx: "textbook (largely passive) ranges; mid-points where a range is given" };
 
-const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS };
+const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS, SC };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.SpineROM = API;
 })(typeof self !== "undefined" ? self : this);
@@ -1093,6 +1138,733 @@ else root.SpineRig = API;
 })(typeof self !== "undefined" ? self : this);
 
 </script>
+<script id="thorax-src">
+// Thorax core: rib cage (12 rib pairs, costal cartilages, sternum) and both clavicles, built onto the approved spine.
+// Units: mm. Character space as in spine-core: x = subject's left, y = up (floor 0), z = anterior.
+// Every thorax element keeps a world-aligned local frame (R = identity at rest) with its origin at its proximal
+// joint: rib -> head (costovertebral joint), cartilage -> costochondral junction, sternum -> sternal angle,
+// clavicle -> sternoclavicular joint. Shapes are swept sections (tubes) along anatomical centrelines.
+// Stable IDs: RIB1_L..RIB12_R, CC1_L..CC12_R, STERNUM, CLAV_L, CLAV_R.
+(function (root) {
+"use strict";
+const NODE = typeof module !== "undefined" && module.exports;
+const C = NODE ? require("./spine-core.js") : root.SpineCore;
+const DEG = Math.PI / 180;
+
+// ---------- vectors ----------
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const len = (a) => Math.hypot(a[0], a[1], a[2]);
+const nrm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const mir = (p) => [-p[0], p[1], p[2]];
+
+// ---------- parts ----------
+const P = { RIB_HEAD: 20, RIB_NECK: 21, RIB_TUBERCLE: 22, RIB_SHAFT: 23, CARTILAGE: 24, MANUBRIUM: 25, STERNAL_BODY: 26,
+  XIPHOID: 27, CLAV_STERNAL: 28, CLAV_SHAFT: 29, CLAV_ACROMIAL: 30 };
+const PART_NAMES = { 20: "Rib head", 21: "Rib neck", 22: "Rib tubercle", 23: "Rib shaft", 24: "Costal cartilage", 25: "Manubrium",
+  26: "Sternal body", 27: "Xiphoid process", 28: "Clavicle, sternal end", 29: "Clavicle, shaft", 30: "Clavicle, acromial end" };
+Object.assign(C.PART_NAMES, PART_NAMES);
+
+// ------------------------------------------------------------------------------------------
+// 1. Reference data (female, scaled to 183 cm; see README "Rib cage and clavicles" for sources)
+// ------------------------------------------------------------------------------------------
+// Sternum: female CT means manubrium 46.7, body 86.6 mm (Folia Morphol. 2018) scaled ~1.08 for stature;
+// jugular notch at the T2–T3 level (female: T3, Standring), sternal angle at T4–T5, xiphisternal joint at T8–T9.
+const STERNUM = { notch: [0, 1492, 37], manubrium: 50, body: 95, xiphoid: 28, manubriumTilt: 28, bodyTilt: 12, xiphoidTilt: -4 };
+// rib types (anatomical): true 1–7 (own cartilage to the sternum), false 8–10 (cartilage joins the one above),
+// floating 11–12 (free cartilaginous tips)
+const TYPE = (n) => (n <= 7 ? "true" : n <= 10 ? "false" : "floating");
+// Per rib (left side, world mm): a = lateral half-width of the centreline; ang = rib angle distance lateral to the
+// tubercle; back = how far the angle lies behind the tubercle; sec = shaft half height / half thickness;
+// twist = rotation of the flat section (rib 1 faces up, rib 2 up-and-out);
+// cc = costochondral junction relative to the sternal attachment (true ribs) or absolute (false / floating ribs).
+const RIBS = [
+  { n: 1, a: 57, ang: 0, back: 0, sec: [7.2, 2.7], twist: 82, cc: [20, -3, -10] },
+  { n: 2, a: 81, ang: 12, back: 6, sec: [6.0, 3.0], twist: 38, cc: [27, 2, -9] },
+  { n: 3, a: 97, ang: 22, back: 9, sec: [6.3, 3.0], twist: 12, cc: [37, -2, -9] },
+  { n: 4, a: 108, ang: 30, back: 11, sec: [6.5, 3.1], twist: 4, cc: [46, -10, -10] },
+  { n: 5, a: 117, ang: 36, back: 12, sec: [6.6, 3.1], twist: 0, cc: [57, -19, -13] },
+  { n: 6, a: 124, ang: 40, back: 13, sec: [6.6, 3.1], twist: 0, cc: [67, -33, -17] },
+  { n: 7, a: 128, ang: 44, back: 13, sec: [6.6, 3.1], twist: 0, cc: [71, -62, -26] },
+  { n: 8, a: 131, ang: 48, back: 13, sec: [6.5, 3.1], twist: 0, E: [105, 1262, 37], join: 0.55 },
+  { n: 9, a: 132, ang: 50, back: 13, sec: [6.3, 3.1], twist: 0, E: [116, 1229, 19], join: 0.58 },
+  { n: 10, a: 130, ang: 50, back: 12, sec: [6.0, 3.0], twist: 0, E: [121, 1197, 1], join: 0.6 },
+  { n: 11, a: 124, ang: 46, back: 10, sec: [5.0, 3.0], twist: 0, E: [119, 1196, -32], tip: 14 },
+  { n: 12, a: 0, ang: 0, back: 0, sec: [4.3, 2.8], twist: 0, E: [84, 1211, -64], tip: 10 },
+];
+// Sternal attachment of each true rib's cartilage: position along the sternum (mm from the jugular notch) and the
+// direction in which the cartilage enters the sternum (left side).
+const STERNAL = { 1: { s: 19, dir: [-1, -0.12, 0.1] }, 2: { s: 50, dir: [-1, 0, 0.1] }, 3: { s: 50 + 0.22 * 95, dir: [-1, 0.05, 0.15] },
+  4: { s: 50 + 0.44 * 95, dir: [-1, 0.15, 0.2] }, 5: { s: 50 + 0.64 * 95, dir: [-1, 0.35, 0.25] }, 6: { s: 50 + 0.82 * 95, dir: [-1, 0.65, 0.3] },
+  7: { s: 50 + 0.98 * 95, dir: [-0.75, 1, 0.3] } };
+// Clavicle (female CT: centreline length 151 ± 8 mm, Bernat et al. 2014; scaled for 183 cm): endpoint length,
+// resting orientation relative to the thorax (Ludewig et al. 2009: ~20° retraction, ~6° elevation),
+// medial (anterior convex) and lateral (anterior concave) curvature depths 8.6 / 9.1 mm.
+const CLAVICLE = { length: 152, retraction: 20, elevation: 6, medialBow: 8.6, lateralBow: 9.1, sc: [27, 1494, 37] };
+
+// ------------------------------------------------------------------------------------------
+// 2. Swept-section tube: centreline nodes {p, rn, rb, N (section height axis), part}; elliptic sections
+// ------------------------------------------------------------------------------------------
+function makeSegs(nodes) {
+  const segs = [];
+  for (let i = 0; i < nodes.length - 1; i++) {
+    const A = nodes[i], B = nodes[i + 1], d = sub(B.p, A.p), L = len(d) || 1e-6, u = mul(d, 1 / L);
+    const R = L / 2 + Math.max(A.rn, A.rb, B.rn, B.rb) + 0.5;
+    segs.push({ a: A.p, u, L, n0: A.N, n1: B.N, rn0: A.rn, rn1: B.rn, rb0: A.rb, rb1: B.rb, p0: A.part, p1: B.part, m: lerp(A.p, B.p, 0.5), R, f0: A.f, f1: B.f });
+  }
+  return segs;
+}
+function segD(s, x, y, z) {
+  const px = x - s.a[0], py = y - s.a[1], pz = z - s.a[2], u = s.u;
+  const h = (px * u[0] + py * u[1] + pz * u[2]) / s.L, hc = h < 0 ? 0 : h > 1 ? 1 : h;
+  const qx = px - u[0] * s.L * hc, qy = py - u[1] * s.L * hc, qz = pz - u[2] * s.L * hc, da = (h - hc) * s.L;
+  let nx = s.n0[0] + (s.n1[0] - s.n0[0]) * hc, ny = s.n0[1] + (s.n1[1] - s.n0[1]) * hc, nz = s.n0[2] + (s.n1[2] - s.n0[2]) * hc;
+  const nd = nx * u[0] + ny * u[1] + nz * u[2]; nx -= nd * u[0]; ny -= nd * u[1]; nz -= nd * u[2];
+  const nl = Math.sqrt(nx * nx + ny * ny + nz * nz) || 1; nx /= nl; ny /= nl; nz /= nl;
+  const bx = u[1] * nz - u[2] * ny, by = u[2] * nx - u[0] * nz, bz = u[0] * ny - u[1] * nx;
+  const rn = s.rn0 + (s.rn1 - s.rn0) * hc, rb = s.rb0 + (s.rb1 - s.rb0) * hc, rm = rn < rb ? rn : rb;
+  const dn = (qx * nx + qy * ny + qz * nz) / rn, db = (qx * bx + qy * by + qz * bz) / rb, dd = da / rm;
+  return (Math.sqrt(dn * dn + db * db + dd * dd) - 1) * rm;
+}
+const unionSegs = (segs) => (x, y, z) => {
+  let best = 1e9;
+  for (let i = 0; i < segs.length; i++) {
+    const s = segs[i], cx = x - s.m[0], cy = y - s.m[1], cz = z - s.m[2];
+    if (Math.sqrt(cx * cx + cy * cy + cz * cz) - s.R > best) continue;
+    const v = segD(s, x, y, z); if (v < best) best = v;
+  }
+  return best;
+};
+function ellPrim(c, r) {
+  return (x, y, z) => {
+    const qx = (x - c[0]) / r[0], qy = (y - c[1]) / r[1], qz = (z - c[2]) / r[2];
+    const k0 = Math.sqrt(qx * qx + qy * qy + qz * qz), k1 = Math.sqrt((qx / r[0]) ** 2 + (qy / r[1]) ** 2 + (qz / r[2]) ** 2);
+    return k0 * (k0 - 1) / Math.max(k1, 1e-6);
+  };
+}
+function smin(a, b, k) { const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k)); return b * (1 - h) + a * h - k * h * (1 - h); }
+const boxPts = (pts, pad) => {
+  const b = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (const p of pts) for (let i = 0; i < 3; i++) { b[i] = Math.min(b[i], p[i] - pad); b[i + 3] = Math.max(b[i + 3], p[i] + pad); }
+  return b;
+};
+// Shape compiled into chunks: each chunk = a few segments with its own bounding box (the renderer marches only the
+// chunks a ray crosses), plus optional extra blobs (rib head) joined smoothly.
+function compileTube(nodes, extras, origin, chunkN) {
+  const loc = nodes.map((n) => ({ ...n, p: sub(n.p, origin) }));
+  const segs = makeSegs(loc), K = chunkN || 7, chunks = [];
+  const ex = (extras || []).map((e) => ({ ...e, c: sub(e.c, origin), d: ellPrim(sub(e.c, origin), e.r) }));
+  for (let i = 0; i < segs.length; i += K) {
+    const ss = segs.slice(i, i + K), pts = [], pad = Math.max(...ss.map((s) => Math.max(s.rn0, s.rn1, s.rb0, s.rb1))) + 1.5;
+    for (const s of ss) { pts.push(s.a, add(s.a, mul(s.u, s.L))); }
+    const box = boxPts(pts, pad), mine = ex.filter((e) => e.c.every((v, k) => v + e.r[k] + 3 >= box[k] && v - e.r[k] - 3 <= box[k + 3]));
+    for (const e of mine) for (let k = 0; k < 3; k++) { box[k] = Math.min(box[k], e.c[k] - e.r[k] - 2); box[k + 3] = Math.max(box[k + 3], e.c[k] + e.r[k] + 2); }
+    const u = unionSegs(ss);
+    const sdf = mine.length ? (x, y, z) => { let d = u(x, y, z); for (const e of mine) d = smin(d, e.d(x, y, z), e.k || 2); return d; } : u;
+    chunks.push({ box, sdf });
+  }
+  const all = unionSegs(segs);
+  const sdf = ex.length ? (x, y, z) => { let d = all(x, y, z); for (const e of ex) d = smin(d, e.d(x, y, z), e.k || 2); return d; } : all;
+  const partAt = (x, y, z) => {
+    for (const e of ex) if (e.d(x, y, z) < 0.6) return e.part;
+    let best = 1e9, part = 0;
+    for (const s of segs) { const v = segD(s, x, y, z); if (v < best) { best = v; const h = Math.max(0, Math.min(1, dot(sub([x, y, z], s.a), s.u) / s.L)); part = h < 0.5 ? s.p0 : s.p1; } }
+    return part;
+  };
+  const box = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (const c of chunks) for (let k = 0; k < 3; k++) { box[k] = Math.min(box[k], c.box[k]); box[k + 3] = Math.max(box[k + 3], c.box[k + 3]); }
+  return { sdf, partAt, box, chunks, segs };
+}
+
+
+// surface points of a swept tube / an ellipsoid (world), for contact checks
+function tubeSurface(nodes, filter, k = 20) {
+  const out = [];
+  for (let i = 0; i < nodes.length; i++) {
+    const n = nodes[i]; if (filter && !filter(n, i)) continue;
+    const T = nrm(sub(nodes[Math.min(nodes.length - 1, i + 1)].p, nodes[Math.max(0, i - 1)].p));
+    const N = nrm(sub(n.N, mul(T, dot(T, n.N)))), B = cross(T, N);
+    for (let j = 0; j < k; j++) { const a = (j / k) * 2 * Math.PI; out.push(add(n.p, add(mul(N, n.rn * Math.cos(a)), mul(B, n.rb * Math.sin(a))))); }
+  }
+  return out;
+}
+function ellSurface(c, r) { const out = []; for (let i = 0; i < 10; i++) for (let j = 0; j < 20; j++) { const t = (i + 0.5) / 10 * Math.PI, p = j / 20 * 2 * Math.PI; out.push(add(c, [r[0] * Math.sin(t) * Math.cos(p), r[1] * Math.cos(t), r[2] * Math.sin(t) * Math.sin(p)])); } return out; }
+
+// ---------- curves ----------
+// centripetal Catmull-Rom through pts, sampled every `step` mm (approximately); returns [{p, t (0..1 by arc)}]
+function catmull(pts, step) {
+  const P = [add(pts[0], sub(pts[0], pts[1])), ...pts, add(pts[pts.length - 1], sub(pts[pts.length - 1], pts[pts.length - 2]))];
+  const out = [];
+  for (let i = 1; i < P.length - 2; i++) {
+    const p0 = P[i - 1], p1 = P[i], p2 = P[i + 1], p3 = P[i + 2];
+    const t0 = 0, t1 = t0 + Math.sqrt(len(sub(p1, p0))) + 1e-6, t2 = t1 + Math.sqrt(len(sub(p2, p1))) + 1e-6, t3 = t2 + Math.sqrt(len(sub(p3, p2))) + 1e-6;
+    const n = Math.max(2, Math.ceil(len(sub(p2, p1)) / step));
+    for (let k = 0; k < n; k++) {
+      const t = t1 + (t2 - t1) * (k / n);
+      const A1 = add(mul(p0, (t1 - t) / (t1 - t0)), mul(p1, (t - t0) / (t1 - t0))), A2 = add(mul(p1, (t2 - t) / (t2 - t1)), mul(p2, (t - t1) / (t2 - t1)));
+      const A3 = add(mul(p2, (t3 - t) / (t3 - t2)), mul(p3, (t - t2) / (t3 - t2)));
+      const B1 = add(mul(A1, (t2 - t) / (t2 - t0)), mul(A2, (t - t0) / (t2 - t0))), B2 = add(mul(A2, (t3 - t) / (t3 - t1)), mul(A3, (t - t1) / (t3 - t1)));
+      out.push(add(mul(B1, (t2 - t) / (t2 - t1)), mul(B2, (t - t1) / (t2 - t1))));
+    }
+  }
+  out.push(pts[pts.length - 1].slice());
+  let acc = 0; const L = [0];
+  for (let i = 1; i < out.length; i++) { acc += len(sub(out[i], out[i - 1])); L.push(acc); }
+  return out.map((p, i) => ({ p, t: L[i] / acc, s: L[i] })).map((o, i, a) => ({ ...o, total: acc }));
+}
+const bez = (P0, P1, P2, P3, t) => { const u = 1 - t; return add(add(mul(P0, u * u * u), mul(P1, 3 * u * u * t)), add(mul(P2, 3 * u * t * t), mul(P3, t * t * t))); };
+const bezT = (P0, P1, P2, P3, t) => { const u = 1 - t; return nrm(add(add(mul(sub(P1, P0), 3 * u * u), mul(sub(P2, P1), 6 * u * t)), mul(sub(P3, P2), 3 * t * t))); };
+// tangent of a sampled curve at index i
+const tanAt = (S, i) => nrm(sub(S[Math.min(S.length - 1, i + 1)].p, S[Math.max(0, i - 1)].p));
+
+// ------------------------------------------------------------------------------------------
+// 3. Sternum (one rigid element: manubrium, body, xiphoid; the manubriosternal joint is a symphysis)
+// ------------------------------------------------------------------------------------------
+function sternumFrame() {
+  const st = STERNUM, J = st.notch.slice();
+  const dir = (a) => [0, -Math.cos(a * DEG), Math.sin(a * DEG)];
+  const m = dir(st.manubriumTilt), b = dir(st.bodyTilt), xd = dir(st.xiphoidTilt);
+  const A = add(J, mul(m, st.manubrium)), X = add(A, mul(b, st.body)), Xt = add(X, mul(xd, st.xiphoid));
+  // centreline point and anterior normal at distance s below the notch
+  const at = (s) => {
+    if (s <= st.manubrium) return { p: add(J, mul(m, s)), u: m };
+    if (s <= st.manubrium + st.body) return { p: add(A, mul(b, s - st.manubrium)), u: b };
+    return { p: add(X, mul(xd, s - st.manubrium - st.body)), u: xd };
+  };
+  // half-width and half-thickness profile along the sternum (piecewise linear)
+  const W = [[0, 25], [8, 25.5], [st.manubrium * 0.55, 21], [st.manubrium - 2, 14.5], [st.manubrium + 2, 13], [st.manubrium + 0.62 * st.body, 16], [st.manubrium + st.body - 3, 11.5],
+    [st.manubrium + st.body + 2, 7], [st.manubrium + st.body + st.xiphoid, 2.2]];
+  const TH = [[0, 6.2], [st.manubrium, 4.9], [st.manubrium + st.body, 4.0], [st.manubrium + st.body + 2, 2.4], [st.manubrium + st.body + st.xiphoid, 1.5]];
+  const pw = (tab, s) => { for (let i = 0; i < tab.length - 1; i++) if (s <= tab[i + 1][0]) { const t = (s - tab[i][0]) / (tab[i + 1][0] - tab[i][0]); return tab[i][1] + (tab[i + 1][1] - tab[i][1]) * Math.max(0, t); } return tab[tab.length - 1][1]; };
+  return { J, A, X, Xt, m, b, xd, at, hw: (s) => pw(W, s), ht: (s) => pw(TH, s), total: st.manubrium + st.body + st.xiphoid };
+}
+// sternum SDF: stack of rounded slabs following the bent centreline, notches subtracted
+function compileSternum(SF, origin) {
+  const st = STERNUM, cuts = [0, 8, st.manubrium * 0.55, st.manubrium, st.manubrium + 0.62 * st.body, st.manubrium + st.body, st.manubrium + st.body + st.xiphoid];
+  const slabs = [];
+  for (let i = 0; i < cuts.length - 1; i++) {
+    const s0 = cuts[i], s1 = cuts[i + 1], a = sub(SF.at(s0 + 1e-3).p, origin), u = SF.at((s0 + s1) / 2).u, L = s1 - s0;
+    const n = nrm(cross([1, 0, 0], u));                       // anterior normal (u points down)
+    const part = s1 <= st.manubrium + 1e-6 ? P.MANUBRIUM : s1 <= st.manubrium + st.body + 1e-6 ? P.STERNAL_BODY : P.XIPHOID;
+    slabs.push({ a, u, n, L, s0, part, d(x, y, z) {
+      const qx = x - a[0], qy = y - a[1], qz = z - a[2], t = qy * u[1] + qz * u[2], zz = qy * n[1] + qz * n[2];
+      const tc = Math.max(0, Math.min(L, t)), s = s0 + tc;
+      const hw = SF.hw(s), ht = SF.ht(s), r = Math.min(ht * 0.8, 3.2);
+      const dx = Math.abs(qx) - hw + r, dz = Math.abs(zz) - ht + r, du = Math.abs(t - L / 2) - L / 2 + r * 0.3;
+      return Math.hypot(Math.max(dx, 0), Math.max(dz, 0), Math.max(du, 0)) + Math.min(Math.max(dx, dz, du), 0) - r;
+    } });
+  }
+  const top = sub(SF.J, origin), mn = nrm(cross([1, 0, 0], SF.m));
+  const notch = (x, y, z) => { const dx = x - top[0], dy = y - (top[1] + 5.5), dz = (z - top[2]); return Math.hypot(dx, dy) - 9.5 + Math.max(0, Math.abs(dz - mn[2] * 0) - 30); };
+  const clav = [-1, 1].map((sg) => ellPrim([top[0] + sg * 23, top[1] + 3.5, top[2] + 0.5], [8.5, 6, 9]));
+  const sdf = (x, y, z) => {
+    let d = 1e9; for (const s of slabs) d = smin(d, s.d(x, y, z), 2.2);
+    d = Math.max(d, -notch(x, y, z), -clav[0](x, y, z), -clav[1](x, y, z));
+    return d;
+  };
+  const partAt = (x, y, z) => { let best = 1e9, p = 0; for (const s of slabs) { const v = s.d(x, y, z); if (v < best) { best = v; p = s.part; } } return p; };
+  const pts = []; for (let s = 0; s <= SF.total; s += 4) pts.push(sub(SF.at(s).p, origin));
+  const box = boxPts(pts, 28);
+  return { sdf, partAt, box };
+}
+
+// ------------------------------------------------------------------------------------------
+// 4. Build: place every rib onto the spine (contact found against the vertebral SDFs), then sternum,
+//    cartilages and clavicles. Returns rest elements plus the anatomical data the rig needs.
+// ------------------------------------------------------------------------------------------
+function build(spine) {
+  const E = Object.fromEntries(spine.els.map((e) => [e.id, e]));
+  const compiled = {}, comp = (id) => compiled[id] || (compiled[id] = C.compile(E[id]));
+  const sdfW = (id, w) => { const l = C.toLocal(E[id], w); return comp(id).sdf(l[0], l[1], l[2]); };
+  const SF = sternumFrame();
+  const ribs = [];
+  for (const def of RIBS) {
+    const n = def.n, T = E["T" + n], v = T.v, prev = n >= 2 && n <= 9 ? "T" + (n - 1) : null, disc = prev ? `D_${prev}_T${n}` : null;
+    const near = [T.id, prev, disc].filter(Boolean);
+    const clear = (w, r) => { let m = 1e9; for (const id of near) for (const d of DIRS) m = Math.min(m, sdfW(id, add(w, [d[0] * r[0], d[1] * r[1], d[2] * r[2]]))); return m; };
+    // --- head: at the disc level for ribs 2–9 (demifacets of two vertebrae), on the own body for 1, 10, 11, 12
+    let yh;
+    if (disc) yh = C.toLocal(T, E[disc].o)[1];
+    else if (n === 1 || n === 10) yh = T.hc / 2 - 4.2;
+    else yh = T.hc * 0.12;
+    const zh = n >= 11 ? -T.D / 2 + 4 : -T.D / 2 + 0.24 * T.D;
+    const rH = n >= 11 ? [4.3, 5.2, 4.6] : n === 1 ? [4.4, 5, 4.8] : [4.5, 6.2, 5.0];
+    const gapTo = (id, w, r) => { let m = 1e9; for (const d of DIRS) m = Math.min(m, sdfW(id, add(w, [d[0] * r[0], d[1] * r[1], d[2] * r[2]]))); return m; };
+    const seat = (dy) => { let xh = T.W / 2 - 2; while (clear(C.toWorld(T, [xh, yh + dy, zh]), rH) < 0.3 && xh < 60) xh += 0.1; return xh; };
+    // ribs 2–9: slide the head along the disc line until it sits evenly in the notch of the two demifacets
+    let dyBest = 0, xh = seat(0);
+    if (disc) {
+      let best = 1e9;
+      for (let dy = -3; dy <= 3.01; dy += 0.5) {
+        const x = seat(dy), w = C.toWorld(T, [x, yh + dy, zh]), g = Math.max(gapTo(T.id, w, rH), gapTo(prev, w, rH));
+        if (g < best) { best = g; dyBest = dy; xh = x; }
+      }
+    }
+    yh += dyBest;
+    let H = C.toWorld(T, [xh, yh, zh]);
+    // --- tubercle: centreline just in front of the transverse-process tip (costotransverse joint), ribs 1–10
+    const tx = v.tp / 2 - 3.5, pw = v.pw, px = v.cw / 2 + pw / 2, pl = Math.max(7, v.cd * 0.5), bz = -T.D / 2 - pl + 1, bx = px + 1.5;
+    const tipZ = bz - Math.tan((22 + (v.idx - 5) * 1.2) * DEG) * (tx - bx), tipY = T.hc * 0.18 + 2.5;
+    const rK = [def.sec[1] + 0.6, def.sec[0] * 0.75, def.sec[1] + 0.6];
+    let K, art = n <= 10;
+    let Kb = null;
+    if (art) {
+      let zk = tipZ; const kx = tx - 0.5, ky = tipY - 2.2;
+      while (clear(C.toWorld(T, [kx, ky, zk]), rK) < 1.2 && zk < 40) zk += 0.1;
+      K = C.toWorld(T, [kx, ky, zk]);
+      // articular tubercle: a knob on the back of the rib, pushed against the front of the transverse-process tip
+      const tip = C.toWorld(T, [tx, tipY, tipZ]), dir = nrm(sub(tip, K)), rb = [3.3, 3.2, 3.3];
+      Kb = K.slice(); for (let i = 0; i < 80 && clear(add(Kb, mul(dir, 0.1)), rb) >= 0.3; i++) Kb = add(Kb, mul(dir, 0.1));
+    } else {
+      // floating ribs: no costotransverse joint; the neck runs out and back below the small transverse process
+      let kx = xh + 9; const ky = yh - 3, kz = zh - 9;
+      while (clear(C.toWorld(T, [kx, ky, kz]), rK) < 1.5 && kx < 60) kx += 0.1;
+      K = C.toWorld(T, [kx, ky, kz]);
+    }
+    // --- shaft key points (world): angle A, lateral L, anterolateral F, costochondral end Ec
+    const make = (H, K, Kb) => {
+      let Ec, S = null;
+      if (n <= 7) { const sa = SF.at(STERNAL[n].s); S = add(sa.p, [SF.hw(STERNAL[n].s) - 2.2, 0, 0]); Ec = add(S, def.cc); }
+      else Ec = def.E.slice();
+      const pts = [H, K];
+      if (n === 12) {
+        pts.push(lerp(K, Ec, 0.5).map((v, i) => v + [6, 0, -4][i]), Ec);
+      } else {
+        const A = def.ang ? [K[0] + def.ang, 0, Math.min(K[2], C.toWorld(T, [tx, tipY, tipZ])[2]) - def.back] : null;
+        const z0 = A ? A[2] : K[2];
+        const L = [def.a, 0, z0 + 0.47 * (Ec[2] - z0)];
+        if (n === 11) { L[2] = z0 + 0.62 * (Ec[2] - z0); }
+        const F = [Ec[0] + 0.74 * (def.a - Ec[0]), 0, L[2] + 0.74 * (Ec[2] - L[2])];
+        // heights: descend from the tubercle to the end in proportion to the horizontal path length
+        const chain = [K, ...(A ? [A] : []), L, ...(n === 11 ? [] : [F]), Ec];
+        let acc = 0; const hl = [0];
+        for (let i = 1; i < chain.length; i++) { acc += Math.hypot(chain[i][0] - chain[i - 1][0], chain[i][2] - chain[i - 1][2]); hl.push(acc); }
+        // lower ribs level out towards their anterior ends (the costal margin turns up into the cartilages)
+        const ease = (f) => (n === 1 ? Math.pow(f, 0.7) : n === 2 ? Math.pow(f, 0.85) : n <= 5 ? Math.pow(f, 1.05) : 1 - Math.pow(1 - f, 1.35));
+        for (let i = 1; i < chain.length - 1; i++) { const f = hl[i] / acc; chain[i][1] = K[1] + (Ec[1] - K[1]) * ease(f); }
+        pts.push(...chain.slice(1));
+      }
+      // floating ribs: tapering cartilaginous tip beyond the bony end
+      const samp = catmull(pts, 3.5);
+      const tot = samp[samp.length - 1].s, sH = 0, sK = len(sub(K, H));
+      const center = [0, (H[1] + Ec[1]) / 2, (K[2] + (n <= 10 ? Ec[2] : K[2])) / 2 - 10];
+      const nodes = samp.map((o, i) => {
+        const T0 = tanAt(samp, i), p = o.p, s = o.s;
+        let out = nrm([p[0] - center[0], 0, p[2] - center[2]]);
+        out = nrm(sub(out, mul(T0, dot(out, T0))));
+        let N0 = cross(out, T0); if (N0[1] < 0) N0 = mul(N0, -1);
+        // twist: rib 1 broad face up, rib 2 up-and-out; the anterior part of the upper ribs turns flat again
+        const tw = def.twist * DEG * (s < sK ? s / sK : 1);
+        const N = nrm(add(mul(N0, Math.cos(tw)), mul(out, Math.sin(tw))));
+        // section along the rib: head -> neck (narrow) -> tubercle -> shaft (tall, thin) -> slightly taller anterior end
+        let rn, rb, part;
+        const fK = s / Math.max(sK, 1e-3), fE = (s - sK) / Math.max(tot - sK, 1);
+        if (s < sK * 0.35) { rn = 4.6; rb = 4.2; part = P.RIB_HEAD; }
+        else if (s < sK) { rn = 3.9 + 0.6 * fK; rb = 3.4; part = P.RIB_NECK; }
+        else if (s < sK + 9) { rn = def.sec[0] * 0.78; rb = def.sec[1] + 0.6; part = art ? P.RIB_TUBERCLE : P.RIB_SHAFT; }
+        else { const g = Math.min(1, (s - sK - 9) / 30); rn = def.sec[0] * (0.78 + 0.22 * g) * (1 + 0.1 * fE * fE); rb = (def.sec[1] + 0.6 * (1 - g)) * (1 - 0.08 * fE); part = P.RIB_SHAFT; }
+        if (n >= 11) { rn *= 1 - 0.45 * Math.max(0, fE - 0.55) / 0.45; rb *= 1 - 0.25 * Math.max(0, fE - 0.55) / 0.45; }
+        return { p, rn, rb, N, part, s };
+      });
+      const endT = tanAt(samp, samp.length - 1), endN = nodes[nodes.length - 1].N;
+      const extras = [{ c: H, r: rH, part: P.RIB_HEAD, k: 2.5 }];
+      if (art) extras.push({ c: Kb, r: [3.3, 3.2, 3.3], part: P.RIB_TUBERCLE, k: 1.6 });
+      return { Ec, S, nodes, endT, endN, extras, tot, sK };
+    };
+    // --- seat the joints on the true swept surface: tubercle on the transverse process, head in its facet(s)
+    const localDir = (v) => sub(C.toWorld(T, v), C.toWorld(T, [0, 0, 0]));
+    let Hc = H, Kc = K, Kbc = Kb, R0;
+    for (let it = 0; it < 10; it++) {
+      R0 = make(Hc, Kc, Kbc);
+      const cmp = compileTube(R0.nodes, R0.extras, Hc, 7), on = (p) => cmp.sdf(p[0] - Hc[0], p[1] - Hc[1], p[2] - Hc[2]) > -0.3;
+      const hp = [...tubeSurface(R0.nodes, (q) => q.s < R0.sK * 0.55), ...ellSurface(Hc, rH)].filter(on);
+      const hg = Math.min(...near.filter((id) => !/^D_/.test(id)).map((id) => Math.min(...hp.map((w) => sdfW(id, w)))));
+      let moved = false;
+      if (art) {
+        const tp = [...tubeSurface(R0.nodes, (q) => q.s > R0.sK - 6 && q.s < R0.sK + 12), ...ellSurface(Kbc, [3.3, 3.2, 3.3])].filter(on);
+        const tg = Math.min(...tp.map((w) => sdfW(T.id, w)));
+        if (tg < 0.15) { const d = mul(localDir([0, 0, 1]), 0.2 - tg); Kc = add(Kc, d); Kbc = add(Kbc, d); moved = true; }
+      }
+      if (hg > 0.7 || hg < 0.1) { Hc = add(Hc, mul(localDir([1, 0, 0]), -0.6 * (hg - 0.35))); moved = true; }
+      if (!moved) break;
+    }
+    const { Ec, S, nodes, endT, endN, extras, tot } = R0;
+    H = Hc; K = Kc;
+    ribs.push({ n, type: TYPE(n), def, H, K, Ec, S, nodes, endT, endN, extras, axis: nrm(sub(K, H)), tot, art, vertebra: T.id, upper: prev });
+  }
+  // --- elements: ribs (left, right), sternum, cartilages, clavicles
+  const els = [];
+  const mirNode = (o) => ({ ...o, p: mir(o.p), N: mir(o.N) });
+  const ribEl = {};
+  for (const side of ["L", "R"]) for (const r of ribs) {
+    const m = side === "L" ? (p) => p : mir;
+    const el = { kind: "rib", id: `RIB${r.n}_${side}`, name: `Rib ${r.n} ${side === "L" ? "left" : "right"} (${r.type})`, region: "ribcage", side, n: r.n, type: r.type,
+      psi: 0, o: m(r.H), vertebra: r.vertebra, upper: r.upper,
+      geo: { nodes: side === "L" ? r.nodes : r.nodes.map(mirNode), extras: r.extras.map((e) => ({ ...e, c: m(e.c) })) },
+      joint: { head: m(r.H), tubercle: m(r.K), axis: side === "L" ? r.axis : mir(r.axis), costotransverse: r.art },
+      end: { p: m(r.Ec), t: side === "L" ? r.endT : mir(r.endT), N: side === "L" ? r.endN : mir(r.endN), rn: r.nodes[r.nodes.length - 1].rn, rb: r.nodes[r.nodes.length - 1].rb } };
+    els.push(el); ribEl[el.id] = el;
+  }
+  const stO = SF.A.slice();
+  const sternum = { kind: "sternum", id: "STERNUM", name: "Sternum (manubrium, body, xiphoid)", region: "sternum", psi: 0, o: stO, SF,
+    landmarks: { jugularNotch: SF.J, sternalAngle: SF.A, xiphisternal: SF.X, xiphoidTip: SF.Xt } };
+  els.push(sternum);
+  // cartilages: the sternal (or upper-cartilage) end is attached; geometry is rebuilt from the posed ends
+  const ccDefs = [];
+  for (const side of ["L", "R"]) for (const r of ribs) {
+    const m = side === "L" ? (p) => p : mir, rib = ribEl[`RIB${r.n}_${side}`];
+    const cd = { id: `CC${r.n}_${side}`, n: r.n, side, rib: rib.id, type: r.type };
+    if (r.n <= 7) { cd.to = "STERNUM"; cd.S = m(r.S); cd.Sdir = side === "L" ? nrm(STERNAL[r.n].dir) : mir(nrm(STERNAL[r.n].dir)); }
+    else if (r.n <= 10) { cd.to = `CC${r.n - 1}_${side}`; cd.u = r.def.join; }
+    else { cd.to = null; cd.tip = r.def.tip; }
+    ccDefs.push(cd);
+  }
+  const rest = { ribs: Object.fromEntries(els.filter((e) => e.kind === "rib").map((e) => [e.id, { R: I3(), t: [0, 0, 0] }])), sternum: { R: I3(), t: [0, 0, 0] } };
+  const cgeo = cartilageGeometry(ribEl, ccDefs, rest);
+  for (const cd of ccDefs) cd.arc = cgeo[cd.id].arc;         // rest arc length: preserved in every pose
+  for (const cd of ccDefs) {
+    const g = cgeo[cd.id];
+    els.push({ kind: "cartilage", id: cd.id, name: `Costal cartilage ${cd.n} ${cd.side === "L" ? "left" : "right"}`, region: "cartilage", side: cd.side, n: cd.n, type: cd.type,
+      psi: 0, o: g.nodes[0].p.slice(), def: cd, geo: g, restLen: g.chord, restArc: g.arc, restVec: g.vec });
+  }
+  // clavicles
+  const stComp = compileSternum(SF, stO);
+  const stD = (w) => stComp.sdf(w[0] - stO[0], w[1] - stO[1], w[2] - stO[2]);
+  // seat: ~2 mm sternoclavicular joint space (articular cartilage and disc) and an open costoclavicular space above
+  // the first rib and its cartilage (subclavian vessels pass between them)
+  const r1 = ribs[0], r1c = compileTube(r1.nodes, r1.extras, r1.H, 7), c1 = cgeo["CC1_L"], c1c = compileTube(c1.nodes, [], c1.nodes[0].p, 50);
+  const below = (w) => Math.min(r1c.sdf(...sub(w, r1.H)), c1c.sdf(...sub(w, c1.nodes[0].p)));
+  let lift = -12;
+  for (; lift < 25; lift += 0.25) {
+    const g = clavicleGeometry("L", lift), pts = tubeSurface(g.nodes), q = Math.round(g.nodes.length * 0.25) * 20;
+    let m = 1e9, b = 1e9, bl = 1e9; for (const w of pts.slice(0, 14 * 20)) m = Math.min(m, stD(w));
+    pts.forEach((w, i) => { const d = below(w); if (i < q) b = Math.min(b, d); else bl = Math.min(bl, d); });
+    if (m >= 2.0 && b >= 1.0 && bl >= 5) break;      // sternal end on the notch and first cartilage; open space laterally
+  }
+  // sternoclavicular pivot: on the articular surface (closest point to the notch), a little inside the bone
+  let pivot = null; {
+    const g = clavicleGeometry("L", lift); let best = 1e9;
+    g.nodes.slice(0, 14).forEach((nd) => { for (const w of tubeSurface([nd, nd])) { const d = stD(w); if (d < best) { best = d; pivot = add(w, mul(nrm(sub(nd.p, w)), PIVOT_DEPTH)); } } });
+  }
+  for (const side of ["L", "R"]) {
+    const g = clavicleGeometry(side, lift);
+    els.push({ kind: "clavicle", id: `CLAV_${side}`, name: `Clavicle ${side === "L" ? "left" : "right"}`, region: "clavicle", side, psi: 0, o: g.sc.slice(), geo: g,
+      joint: { sc: g.sc, pivot: side === "L" ? pivot : mir(pivot), acromial: g.ac, axis: g.axis } });
+  }
+  return { els, ribs, SF, ccDefs };
+}
+const PIVOT_DEPTH = 3;
+const DIRS = (() => { const d = []; for (const x of [-1, 0, 1]) for (const y of [-1, 0, 1]) for (const z of [-1, 0, 1]) if (x || y || z) d.push(nrm([x, y, z])); return d; })();
+const I3 = () => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const mv = (A, v) => [0, 1, 2].map((i) => A[i][0] * v[0] + A[i][1] * v[1] + A[i][2] * v[2]);
+const app = (T, p) => add(mv(T.R, p), T.t);
+
+// Cartilage tubes from rib ends (moved by `pose.ribs[id]`) to the sternum (moved by `pose.sternum`) or to the
+// cartilage above (false ribs). Each is a cubic Bezier leaving the rib along its end tangent and entering the
+// sternum along the notch direction, so it bends rather than stretches when its two ends move.
+function cartilageGeometry(ribEl, ccDefs, pose, lean) {
+  const out = {};
+  for (const cd of ccDefs) {
+    const rib = ribEl[cd.rib], T = pose.ribs[rib.id], H0 = rib.o;
+    // rib transforms act about the world origin on rest world points
+    const E = app(T, rib.end.p), tE = mv(T.R, rib.end.t), NE = mv(T.R, rib.end.N);
+    let S, tS, NS, rnS, rbS;
+    if (cd.to === "STERNUM") { S = app(pose.sternum, cd.S); tS = mv(pose.sternum.R, cd.Sdir); NS = mv(pose.sternum.R, [0, 1, 0]); rnS = cd.n === 1 ? 6.2 : 5.0; rbS = 3.6; }
+    else if (cd.to) {
+      const up = out[cd.to], k = up.curve;
+      S = bez(k[0], k[1], k[2], k[3], cd.u); const tu = bezT(k[0], k[1], k[2], k[3], cd.u);
+      // enter the upper cartilage from below and slightly behind
+      tS = nrm(add(mul(tu, -0.35), mv(pose.sternum.R, [0, 0.9, 0.12])));
+      S = add(S, mul(mv(pose.sternum.R, [0, 1, 0]), -2.5));
+      NS = mv(pose.sternum.R, [0, 0, 1]); rnS = 5.0; rbS = 3.6;
+    } else {
+      S = add(E, mul(tE, cd.tip)); tS = tE; NS = NE; rnS = 1.6; rbS = 1.4;
+    }
+    const L = len(sub(S, E)), ch = nrm(sub(S, E));
+    // leave the rib between its own direction and the chord (cartilage bends, never loops back)
+    const tE2 = cd.to ? nrm(add(tE, mul(ch, cd.n >= 8 ? 2.2 : 0.8))) : tE;
+    const tS2 = cd.to && cd.n >= 8 ? nrm(add(tS, mul(ch, 1.2))) : tS;
+    const a1 = cd.to ? (cd.n >= 8 ? 0.28 : 0.36) : 0.33, a2 = cd.to ? 0.34 : 0.33;
+    const curveOf = (h) => [E, add(E, mul(tE2, a1 * h * L)), sub(S, mul(tS2, a2 * h * L)), S];
+    const arcOf = (k) => { let a = 0, q = k[0]; for (let i = 1; i <= 16; i++) { const p = bez(k[0], k[1], k[2], k[3], i / 16); a += len(sub(p, q)); q = p; } return a; };
+    // cartilage is flexible but nearly inextensible: keep its rest arc length by bending (handle length), not stretching
+    let h = 1;
+    if (cd.arc && cd.to) {
+      let lo = 0.02, hi = 2.5;
+      if (arcOf(curveOf(lo)) >= cd.arc) h = lo;
+      else if (arcOf(curveOf(hi)) <= cd.arc) h = hi;
+      else { for (let it = 0; it < 22; it++) { const m = (lo + hi) / 2; if (arcOf(curveOf(m)) < cd.arc) lo = m; else hi = m; } h = (lo + hi) / 2; }
+    }
+    const [P0, P1, P2, P3] = curveOf(h), arc = arcOf([P0, P1, P2, P3]);
+    if (lean) { out[cd.id] = { curve: [P0, P1, P2, P3], chord: L, arc, vec: sub(S, E), S, E }; continue; }
+    const nodes = [], n = Math.max(6, Math.ceil(L / 4));
+    for (let i = 0; i <= n; i++) {
+      const t = i / n, p = bez(P0, P1, P2, P3, t), N = nrm(lerp(NE, NS, t));
+      const rn = rib.end.rn + (rnS - rib.end.rn) * t, rb = rib.end.rb + 0.5 + (rbS - rib.end.rb - 0.5) * t;
+      nodes.push({ p, rn: Math.max(rn, 1), rb: Math.max(rb, 1), N, part: P.CARTILAGE });
+    }
+    // pull the first node slightly into the rib so the costochondral junction is closed
+    nodes[0] = { ...nodes[0], p: sub(nodes[0].p, mul(tE, 1.5)) };
+    out[cd.id] = { nodes, curve: [P0, P1, P2, P3], chord: L, arc, bend: h, vec: sub(S, E), S, E };
+  }
+  return out;
+}
+
+function clavicleGeometry(side, lift = 0) {
+  const c = CLAVICLE, sg = side === "L" ? 1 : -1;
+  const sc = [sg * (c.sc[0] + lift * 0.6), c.sc[1] + lift * 0.8, c.sc[2]];
+  const d = nrm([sg * Math.cos(c.elevation * DEG) * Math.cos(c.retraction * DEG), Math.sin(c.elevation * DEG), -Math.cos(c.elevation * DEG) * Math.sin(c.retraction * DEG)]);
+  const fwd = nrm(cross(d, [0, sg, 0]).map((v) => v * -1));     // horizontal, anterior side of the chord
+  const fw = fwd[2] < 0 ? mul(fwd, -1) : fwd;
+  // S-curve: medial two-thirds convex forward, lateral third concave forward; slight superior arch
+  const bow = [[0, 0], [0.12, 0.55], [0.3, 1], [0.47, 0.6], [0.62, 0], [0.78, -0.75], [0.9, -1], [1, -0.55]];
+  const pts = bow.map(([t, b]) => add(add(sc, mul(d, t * c.length)), add(mul(fw, b * (b > 0 ? c.medialBow : c.lateralBow)), [0, 3.5 * Math.sin(Math.PI * t), 0])));
+  const samp = catmull(pts, 3);
+  const nodes = samp.map((o, i) => {
+    const T0 = tanAt(samp, i), t = o.t;
+    let N = sub([0, 1, 0], mul(T0, T0[1])); N = nrm(N);
+    // sections: bulky prismatic sternal end, rounded shaft, flattened acromial end
+    const prof = [[0, 10.5, 11.5], [0.1, 8.2, 8.8], [0.25, 6.4, 6.6], [0.5, 5.8, 6.0], [0.7, 5.6, 7.2], [0.88, 5.2, 10.4], [1, 5.0, 10.8]];
+    let k = 0; while (k < prof.length - 2 && t > prof[k + 1][0]) k++;
+    const f = (t - prof[k][0]) / (prof[k + 1][0] - prof[k][0]);
+    const rn = prof[k][1] + (prof[k + 1][1] - prof[k][1]) * f, rb = prof[k][2] + (prof[k + 1][2] - prof[k][2]) * f;
+    return { p: o.p, rn, rb, N, part: t < 0.16 ? P.CLAV_STERNAL : t > 0.8 ? P.CLAV_ACROMIAL : P.CLAV_SHAFT };
+  });
+  return { nodes, sc, ac: samp[samp.length - 1].p, axis: d, length: samp[samp.length - 1].s, endpoint: len(sub(samp[samp.length - 1].p, sc)) };
+}
+
+// ---------- compile (called by SpineCore.compile for these kinds) ----------
+function compile(el) {
+  if (el.kind === "sternum") return compileSternum(el.SF, el.o);
+  const g = el.geo;
+  return compileTube(g.nodes, g.extras, el.o, el.kind === "cartilage" ? 50 : 7);
+}
+C.registerKind && ["rib", "cartilage", "sternum", "clavicle"].forEach((k) => C.registerKind(k, compile));
+
+const API = { tubeSurface, ellSurface, P, PART_NAMES, RIBS, STERNUM, STERNAL, CLAVICLE, TYPE, build, compile, cartilageGeometry, clavicleGeometry, sternumFrame, catmull, bez, bezT };
+if (NODE) module.exports = API;
+else root.ThoraxCore = API;
+})(typeof self !== "undefined" ? self : this);
+
+</script>
+<script id="thorax-rig-src">
+// Thorax rig: rib cage and clavicles on top of the approved spinal rig (spine-rig is used unchanged).
+//
+// Hierarchy
+//   vertebra Tn ──(costovertebral + costotransverse joints: one rotation about the head–tubercle axis)──> rib n
+//   true-rib ends 1–7 ──(costal cartilages, deformable)──> sternum (rigid: manubrium, body, xiphoid)
+//   false-rib ends 8–10 ──(cartilage)──> cartilage above;   floating ribs 11–12: free cartilaginous tips
+//   sternum (manubrium) ──(sternoclavicular joint: elevation, protraction, axial rotation)──> clavicle L / R
+// For any spinal pose the ribs move rigidly with their vertebrae; each rib may also turn on its costovertebral axis
+// and the sternum finds the position that disturbs the cartilages least (least squares on cartilage length and
+// shape). Bones never deform: only cartilages are rebuilt for a pose.
+//
+// pose.clavicle = { L: { elev, prot, rot }, R: { elev, prot, rot } }  (degrees; + elevation, + protraction, + posterior rotation)
+(function (root) {
+"use strict";
+const NODE = typeof module !== "undefined" && module.exports;
+const C = NODE ? require("./spine-core.js") : root.SpineCore;
+const Th = NODE ? require("./thorax-core.js") : root.ThoraxCore;
+const SR = NODE ? require("./spine-rig.js") : root.SpineRig;
+const ROM = NODE ? require("./spine-rom.js") : root.SpineROM;
+const DEG = Math.PI / 180;
+
+// ---------- transform kit (T = { R, t }, p' = R p + t) ----------
+const I3 = () => [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const mm = (A, B) => A.map((r) => [0, 1, 2].map((j) => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
+const mv = (A, v) => [0, 1, 2].map((i) => A[i][0] * v[0] + A[i][1] * v[1] + A[i][2] * v[2]);
+const tr = (A) => [0, 1, 2].map((i) => [A[0][i], A[1][i], A[2][i]]);
+const comp = (A, B) => ({ R: mm(A.R, B.R), t: mv(A.R, B.t).map((v, i) => v + A.t[i]) });
+const inv = (A) => { const Rt = tr(A.R); return { R: Rt, t: mv(Rt, A.t).map((v) => -v) }; };
+const app = (A, p) => mv(A.R, p).map((v, i) => v + A.t[i]);
+const about = (R, p) => ({ R, t: p.map((v, i) => v - mv(R, p)[i]) });
+const ID = () => ({ R: I3(), t: [0, 0, 0] });
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const len = (a) => Math.hypot(a[0], a[1], a[2]);
+function axisAngle(k, a) {
+  const c = Math.cos(a), s = Math.sin(a), v = 1 - c, [x, y, z] = k;
+  return [[c + x * x * v, x * y * v - z * s, x * z * v + y * s], [y * x * v + z * s, c + y * y * v, y * z * v - x * s], [z * x * v - y * s, z * y * v + x * s, c + z * z * v]];
+}
+const rotvec = (w) => { const a = Math.hypot(w[0], w[1], w[2]); return a < 1e-12 ? I3() : axisAngle([w[0] / a, w[1] / a, w[2] / a], a); };
+const rx = (a) => axisAngle([1, 0, 0], a), ry = (a) => axisAngle([0, 1, 0], a), rz = (a) => axisAngle([0, 0, 1], a);
+const MIR = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
+// Kabsch: best rigid map of points A onto B
+function kabsch(A, B) {
+  const n = A.length, ca = [0, 0, 0], cb = [0, 0, 0];
+  for (let i = 0; i < n; i++) for (let k = 0; k < 3; k++) { ca[k] += A[i][k] / n; cb[k] += B[i][k] / n; }
+  const H = [[0, 0, 0], [0, 0, 0], [0, 0, 0]];
+  for (let i = 0; i < n; i++) for (let r = 0; r < 3; r++) for (let c = 0; c < 3; c++) H[r][c] += (A[i][r] - ca[r]) * (B[i][c] - cb[c]);
+  // polar decomposition by iteration (robust for near-identity rotations): R = closest rotation to H^T
+  let R = tr(H), fro = Math.sqrt(R.flat().reduce((s, v) => s + v * v, 0)) || 1;
+  R = R.map((r) => r.map((v) => v / fro));
+  for (let it = 0; it < 40; it++) {
+    const Ri = inv3(R); if (!Ri) break;
+    R = R.map((r, i) => r.map((v, j) => 0.5 * (v + Ri[j][i])));
+  }
+  return { R, t: sub(cb, mv(R, ca)) };
+}
+function inv3(m) {
+  const [a, b, c] = m[0], [d, e, f] = m[1], [g, h, i] = m[2];
+  const A = e * i - f * h, B = -(d * i - f * g), Cc = d * h - e * g, det = a * A + b * B + c * Cc;
+  if (Math.abs(det) < 1e-12) return null;
+  return [[A / det, -(b * i - c * h) / det, (b * f - c * e) / det], [B / det, (a * i - c * g) / det, -(a * f - c * d) / det], [Cc / det, -(a * h - b * g) / det, (a * e - b * d) / det]];
+}
+function solveLin(A, b) {   // Gaussian elimination with partial pivoting
+  const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+  for (let c = 0; c < n; c++) {
+    let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r;
+    [M[c], M[p]] = [M[p], M[c]]; const d = M[c][c] || 1e-12;
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / d; if (f) for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; }
+  }
+  const x = new Array(n).fill(0);
+  for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / (M[r][r] || 1e-12); }
+  return x;
+}
+
+// ---------- skeleton = spine + thorax ----------
+function buildSkeleton() {
+  const spine = C.build(), thorax = Th.build(spine);
+  return { spine, thorax, els: [...spine.els, ...thorax.els], nSpine: spine.els.length };
+}
+function makeRig(sk) {
+  const spineRig = SR.makeRig(sk.spine);
+  const els = sk.els, byId = Object.fromEntries(els.map((e, k) => [e.id, k]));
+  const ribs = els.filter((e) => e.kind === "rib"), ccs = els.filter((e) => e.kind === "cartilage"), st = els.find((e) => e.kind === "sternum");
+  const ribEl = Object.fromEntries(ribs.map((e) => [e.id, e]));
+  const ccDefs = sk.thorax.ccDefs;
+  // solver unknowns: costovertebral angle of ribs 1–10 on both sides, sternum correction (rotation vector, translation)
+  const solved = ribs.map((r) => r.id);
+  // intercostal coupling of the floating ribs: corresponding points on rib n and rib n-1 (fractions of their length)
+  const at = (r, f) => r.geo.nodes[Math.round(f * (r.geo.nodes.length - 1))].p;
+  const links = ribs.filter((r) => r.n >= 11).map((r) => {
+    const up = ribs.find((x) => x.side === r.side && x.n === r.n - 1);
+    return { id: r.id, up: up.id, f: [0.35, 0.55, 0.75, 1].map((f) => [at(r, f), at(up, f)]) };
+  });
+  return { spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
+    restVec: Object.fromEntries(ccs.map((c) => [c.id, c.restVec])) };
+}
+
+const SC = ROM.SC, K = ROM.SETTINGS.conservative;
+const clavLimits = () => ({ elev: [-SC.depression * K, SC.elevation * K], prot: [-SC.retraction * K, SC.protraction * K], rot: [0, SC.posteriorRotation * K] });
+const ZERO_CLAV = () => ({ L: { elev: 0, prot: 0, rot: 0 }, R: { elev: 0, prot: 0, rot: 0 } });
+const clavZero = (p) => !p || !p.clavicle || ["L", "R"].every((s) => !p.clavicle[s] || Object.values(p.clavicle[s]).every((v) => !v));
+const isZero = (p) => SR.isZero(p) && clavZero(p);
+const ZERO = () => ({ ...SR.ZERO(), clavicle: ZERO_CLAV() });
+
+// sternoclavicular rotation (left side; the right side is mirrored) about the joint centre
+// combined motions share one envelope (as in the spinal rig): |(e, p, r) / limits|_2 <= 1
+function clavSolve(a) {
+  const lim = clavLimits(), cl = (v, r) => Math.max(r[0], Math.min(r[1], v || 0));
+  let e = cl(a.elev, lim.elev), p = cl(a.prot, lim.prot), r = cl(a.rot, lim.rot);
+  const n = Math.hypot(e / (e >= 0 ? lim.elev[1] : -lim.elev[0]), p / (p >= 0 ? lim.prot[1] : -lim.prot[0]), r / lim.rot[1]);
+  if (n > 1) { e /= n; p /= n; r /= n; }
+  return { elev: e, prot: p, rot: r, envelope: n, scaled: n > 1 };
+}
+function clavR(side, a, axis) {
+  const q = clavSolve(a), e = q.elev * DEG, p = q.prot * DEG, r = q.rot * DEG;
+  const u = side === "L" ? axis : mv(MIR, axis);                            // rest long axis in left-side terms
+  const RL = mm(ry(-p), mm(rz(e), axisAngle(u, -r)));
+  return side === "L" ? RL : mm(MIR, mm(RL, MIR));
+}
+
+// Rib-cage solution for given vertebral transforms (delta: id -> T)
+function solveRibcage(rig, delta) {
+  const { ribs, ribEl, ccDefs, solved, restLen, restVec, st, links } = rig;
+  const cfg = ROM.SETTINGS.ribcage, idx = Object.fromEntries(solved.map((id, i) => [id, i])), nT = solved.length;
+  const ribT = (r, th) => comp(delta[r.vertebra] || ID(), about(axisAngle(r.joint.axis, th * DEG), r.joint.head));
+  // initial sternum: carried by the true-rib ends with no costovertebral rotation
+  const A = [], B = [];
+  for (const r of ribs) if (r.n <= 7) { A.push(r.end.p); B.push(app(ribT(r, 0), r.end.p)); }
+  const T0 = kabsch(A, B), cen = app(T0, st.o);
+  const unpack = (x) => {
+    const ribsT = {}; for (const r of ribs) ribsT[r.id] = ribT(r, x[idx[r.id]]);
+    const w = [x[nT] * DEG, x[nT + 1] * DEG, x[nT + 2] * DEG], corr = comp({ R: I3(), t: [x[nT + 3], x[nT + 4], x[nT + 5]] }, about(rotvec(w), cen));
+    return { ribs: ribsT, sternum: comp(corr, T0) };
+  };
+  const resid = (x) => {
+    const P = unpack(x), g = Th.cartilageGeometry(ribEl, ccDefs, P, true), Rt = tr(P.sternum.R), out = [];
+    for (const cd of ccDefs) {
+      if (!cd.to) continue;
+      // first rib: synchondrosis with the manubrium (stiff); second rib: at the sternal angle (stiffer)
+      const c = g[cd.id], v = mv(Rt, c.vec), v0 = restVec[cd.id], w = cd.n === 1 ? 4 : cd.n === 2 ? 1.6 : 1;
+      out.push(w * (len(c.vec) - restLen[cd.id]));
+      for (let k = 0; k < 3; k++) out.push(w * 0.15 * (v[k] - v0[k]));
+    }
+    for (const L of links) {                      // floating ribs keep their place relative to the rib above
+      const Ta = P.ribs[L.id], Tb = P.ribs[L.up], Rv = tr((delta[ribEl[L.id].vertebra] || ID()).R);
+      for (const [pa, pb] of L.f) { const v = mv(Rv, sub(app(Ta, pa), app(Tb, pb))), v0 = sub(pa, pb); for (let k = 0; k < 3; k++) out.push(0.25 * (v[k] - v0[k])); }
+    }
+    for (let i = 0; i < nT; i++) { const a = Math.abs(x[i]); out.push(0.25 * x[i], a > cfg.costovertebralMax ? 4 * (a - cfg.costovertebralMax) : 0); }
+    return out;
+  };
+  let x = new Array(nT + 6).fill(0), r = resid(x), f = r.reduce((s, v) => s + v * v, 0), mu = 1e-2;
+  for (let it = 0; it < 14; it++) {
+    const J = x.map((_, j) => { const xp = x.slice(); xp[j] += 1e-3; return resid(xp).map((v, i) => (v - r[i]) / 1e-3); });   // J[j][i]
+    const n = x.length, JTJ = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, b) => { let s = 0; for (let i = 0; i < r.length; i++) s += J[a][i] * J[b][i]; return s; }));
+    const g = x.map((_, a) => { let s = 0; for (let i = 0; i < r.length; i++) s += J[a][i] * r[i]; return s; });
+    let accepted = false;
+    for (let k = 0; k < 8; k++) {
+      const M = JTJ.map((row, a) => row.map((v, b) => v + (a === b ? mu * (1 + JTJ[a][a]) : 0)));
+      const dx = solveLin(M, g.map((v) => -v)), xn = x.map((v, i) => v + dx[i]), rn = resid(xn), fn = rn.reduce((s, v) => s + v * v, 0);
+      if (fn < f) { const gain = f - fn; x = xn; r = rn; f = fn; mu = Math.max(1e-7, mu / 3); accepted = gain > 1e-6; break; }
+      mu *= 4;
+    }
+    if (!accepted) break;
+  }
+  const P = unpack(x);
+  const theta = {}; for (const id of solved) theta[id] = x[idx[id]];
+  return { ...P, theta, residual: Math.sqrt(f), sternumCorrection: x.slice(nT) };
+}
+
+// Posed skeleton. Spine through SpineRig.posedModel (unchanged); thorax follows.
+function posedModel(rig, restComps, pose) {
+  const nS = rig.sk.nSpine;
+  if (isZero(pose)) return { els: rig.els, comps: restComps, solved: SR.solve(SR.ZERO()), neutral: true, thorax: null };
+  const sp = SR.posedModel(rig.spineRig, restComps.slice(0, nS), pose);
+  const delta = {}; sp.els.forEach((e) => { if (e.delta) delta[e.id] = e.delta; });
+  const sol = solveRibcage(rig, delta);
+  const els = sp.els.slice(), comps = sp.comps.slice();
+  const geo = Th.cartilageGeometry(rig.ribEl, rig.ccDefs, sol);
+  const clav = (pose.clavicle) || ZERO_CLAV();
+  const clavT = {};
+  for (let k = nS; k < rig.els.length; k++) {
+    const el = rig.els[k];
+    if (el.kind === "rib") { const T = sol.ribs[el.id]; els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]); }
+    else if (el.kind === "sternum") { const T = sol.sternum; els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]); }
+    else if (el.kind === "clavicle") {
+      const T = comp(sol.sternum, about(clavR(el.side, clav[el.side] || {}, el.joint.axis), el.joint.pivot)); clavT[el.id] = T;
+      els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]);
+    } else if (el.kind === "cartilage") {
+      const g = geo[el.id], pel = { ...el, o: g.nodes[0].p.slice(), geo: g, R: undefined, psi: 0, stretch: g.arc / el.restArc, chordRatio: g.chord / el.restLen };
+      els.push(pel); comps.push(C.compile(pel));
+    }
+  }
+  return { els, comps, solved: sp.solved, neutral: false, thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
+    stretch: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].arc / c.restArc])),
+    chord: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].chord / c.restLen])) } };
+}
+
+// demonstration poses: the approved spinal demos (unchanged ids) plus clavicle demos for the future shoulder girdle
+function demoPoses() {
+  const D = SR.demoPoses().map((d) => ({ ...d, pose: { ...d.pose, clavicle: ZERO_CLAV() } }));
+  const lim = clavLimits(), both = (o) => ({ L: { elev: 0, prot: 0, rot: 0, ...o }, R: { elev: 0, prot: 0, rot: 0, ...o } });
+  const r1 = (v) => Math.round(v * 10) / 10;
+  D.push({ id: "shrug", name: "Shrug", pose: { ...SR.ZERO(), clavicle: both({ elev: r1(lim.elev[1]) }) } });
+  D.push({ id: "shoulders-back", name: "Shoulders back", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[0] * 0.85), elev: r1(lim.elev[0] * 0.5) }) } });
+  return D;
+}
+// scale every angle of a pose (nested clavicle sides included)
+const scalePose = (p, f) => JSON.parse(JSON.stringify(p), (k, v) => (typeof v === "number" ? v * f : v));
+const API = { demoPoses, scalePose, buildSkeleton, makeRig, posedModel, solveRibcage, clavLimits, clavSolve, clavR, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
+if (NODE) module.exports = API;
+else root.ThoraxRig = API;
+})(typeof self !== "undefined" ? self : this);
+
+</script>
 <script id="render-src">
 // Spine renderer: orthographic, per-element ray casting into a shared z-buffer, then the approved pixel-art pass.
 // Works in the browser (global SpineRender) and in Node (module.exports).
@@ -1145,7 +1917,7 @@ function cast(model, view, onProgress, only) {
   let hT = new Float32Array(cap), hN = new Float32Array(cap * 3), hA = new Float32Array(cap), hK = new Uint8Array(cap), hL = new Float32Array(cap * 3);
   const grow = () => { cap *= 2; const g = (A, m) => { const B = new A.constructor(cap * m); B.set(A); return B; }; hT = g(hT, 1); hN = g(hN, 3); hA = g(hA, 1); hK = g(hK, 1); hL = g(hL, 3); };
   jobs.forEach((J, q) => {
-    const { k, comp, M, Ov, i0, i1, j0, j1 } = J, sdf = comp.sdf, b = comp.box;
+    const { k, comp, M, Ov, i0, i1, j0, j1 } = J, sdf = comp.sdf, b = comp.box, chunks = comp.chunks || null;
     const ldx = -M[2][0], ldy = -M[2][1], ldz = -M[2][2];          // ray direction in local space
     for (let j = j0; j <= j1; j++) {
       const vy = (H / 2 - (j + 0.5) / ss) * mm;
@@ -1163,7 +1935,27 @@ function cast(model, view, onProgress, only) {
         const u = (j - V0) * UW + (i - U0);
         if (t0 >= zb[u]) continue;
         let t = t0, hit = false;
-        for (let s = 0; s < 200 && t < t1; s++) {
+        if (chunks) {
+          // long thin shapes (ribs, clavicles): march only the chunks this ray crosses, nearest hit wins
+          let best = zb[u];
+          for (let c = 0; c < chunks.length; c++) {
+            const cb = chunks[c].box; let a0 = t0, a1 = t1, ok2 = true;
+            for (let ax = 0; ax < 3 && ok2; ax++) {
+              const o = ax === 0 ? ox : ax === 1 ? oy : oz, d = ax === 0 ? ldx : ax === 1 ? ldy : ldz;
+              if (Math.abs(d) < 1e-9) { if (o < cb[ax] || o > cb[ax + 3]) ok2 = false; continue; }
+              let ta = (cb[ax] - o) / d, tb = (cb[ax + 3] - o) / d; if (ta > tb) { const tt = ta; ta = tb; tb = tt; }
+              if (ta > a0) a0 = ta; if (tb < a1) a1 = tb; if (a0 > a1) ok2 = false;
+            }
+            if (!ok2 || a0 >= best) continue;
+            const cs = chunks[c].sdf; let tt = a0;
+            for (let s = 0; s < 160 && tt < a1 && tt < best; s++) {
+              const d = cs(ox + ldx * tt, oy + ldy * tt, oz + ldz * tt);
+              if (d < 0.04) { best = tt; hit = true; break; }
+              tt += Math.max(d * 0.9, 0.02);
+            }
+          }
+          t = best;
+        } else for (let s = 0; s < 200 && t < t1; s++) {
           const d = sdf(ox + ldx * t, oy + ldy * t, oz + ldz * t);
           if (d < 0.04) { hit = true; break; }
           t += Math.max(d * 0.9, 0.02);
@@ -1269,6 +2061,11 @@ function stylise(g, model, st0) {
     }
     tone = out;
   }
+  // separate bones that touch without a depth jump (clavicle on the manubrium, rib head on its vertebra): a joint line,
+  // drawn on the farther of the two. Applies to skeletal elements added after the spine; spine-only pairs are unchanged.
+  const THX = { rib: 1, sternum: 1, clavicle: 1 };
+  const joint = (p, q) => { const a = model.els[objOf[p] - 1], b = model.els[objOf[q] - 1];
+    return a && b && a !== b && (THX[a.kind] || THX[b.kind]) && a.kind !== "cartilage" && b.kind !== "cartilage" && a.kind !== "disc" && b.kind !== "disc" && depth[q] <= depth[p]; };
   let lab = new Uint8Array(n);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const p = y * W + x; if (!cover[p]) continue;
@@ -1277,6 +2074,7 @@ function stylise(g, model, st0) {
     for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
       if (!at(cover, x + dx, y + dy, 0)) edge = true;
       else if (at(depth, x + dx, y + dy, 0) - depth[p] > st.gap) inner = true;
+      else if (objOf[p + dy * W + dx] !== objOf[p] && joint(p, p + dy * W + dx)) inner = true;
     }
     if (edge && st.outline) lab[p] = 1; else if (inner && st.lines) lab[p] = tone[p] >= 1 ? 2 : 1;
   }
@@ -1307,7 +2105,7 @@ function paint(st, model, palettes = PALETTES) {
   for (let p = 0; p < W * H; p++) {
     const v = lab[p]; if (!v) continue;
     const el = model.els[obj[p] - 1];
-    const pal = el && el.kind === "disc" ? pals.disc : pals.bone;
+    const pal = el && (el.kind === "disc" || el.kind === "cartilage") ? pals.disc : pals.bone;   // cartilage tissue: disc ramp
     const c = v === 1 ? pals.bone[0] : pal[v - 1];
     rgba[p * 4] = c[0]; rgba[p * 4 + 1] = c[1]; rgba[p * 4 + 2] = c[2]; rgba[p * 4 + 3] = 255;
   }
@@ -1334,18 +2132,17 @@ else root.SpineRender = API;
 
 </script>
 <script>
-// Pixel Character Lab: one environment for every build level (vertebra -> spine -> skeleton -> body -> clothing).
-// Every level is a view onto the same anatomy model (spine-core) and the same pixel-art renderer (spine-render).
+// Pixel Character Lab: one environment, three tabs (Skeleton, Body, Clothing).
+// Skeleton holds the whole skeleton as it is completed (spine, rib cage, clavicles) and the single-bone style view.
+// Every view is the same anatomy model (spine-core + thorax-core) through the same pixel-art renderer (spine-render).
 (() => {
 const $ = (id) => document.getElementById(id);
-const C = window.SpineCore, R = window.SpineRender;
+const C = window.SpineCore, R = window.SpineRender, Th = window.ThoraxCore, TR = window.ThoraxRig, SR = window.SpineRig, ROM = window.SpineROM;
 
-const LEVELS = [
-  { n: 1, name: "1 · Vertebra", sub: "Style study, any single bone" },
-  { n: 2, name: "2 · Spine", sub: "24 vertebrae, sacrum, coccyx, 23 discs" },
-  { n: 3, name: "3 · Skeleton", sub: "Next", off: true },
-  { n: 4, name: "4 · Body", sub: "Later", off: true },
-  { n: 5, name: "5 · Clothing", sub: "Later", off: true },
+const TABS = [
+  { id: "skeleton", name: "Skeleton", sub: "Spine, rib cage, clavicles" },
+  { id: "body", name: "Body", sub: "Not started" },
+  { id: "clothing", name: "Clothing", sub: "Not started" },
 ];
 const TOP = { id: "top", name: "Top", yaw: 0, pitch: 90 };
 const VIEWS = [...R.VIEWS.map((v) => ({ ...v, pitch: 0 })), TOP];
@@ -1358,74 +2155,93 @@ const PRESETS = {
 };
 const SLOT = ["outline", "line", "shade", "mid", "light", "hi"];
 const PART_COLORS = { 1: "#d9a441", 2: "#5aa6c9", 3: "#8b7fd1", 4: "#5fb38a", 5: "#d9708a", 6: "#c98b5a", 7: "#7c9cd9", 8: "#e0605a", 9: "#59b7c9",
-  10: "#a87fc9", 11: "#c9c25a", 12: "#a7b2b0", 13: "#b59a72", 14: "#e3b98f", 15: "#c7a5c9", 16: "#e89a4f", 17: "#6fcf9a", 18: "#d9a441", 19: "#3a3330" };
-const REGION_COLORS = { cervical: "#d9a441", thoracic: "#5aa6c9", lumbar: "#8b7fd1", sacral: "#5fb38a", coccygeal: "#d9708a", disc: "#a7b2b0" };
+  10: "#a87fc9", 11: "#c9c25a", 12: "#a7b2b0", 13: "#b59a72", 14: "#e3b98f", 15: "#c7a5c9", 16: "#e89a4f", 17: "#6fcf9a", 18: "#d9a441", 19: "#3a3330",
+  20: "#e0605a", 21: "#e89a4f", 22: "#c9c25a", 23: "#d9b98a", 24: "#a7b2b0", 25: "#59b7c9", 26: "#5aa6c9", 27: "#8b7fd1", 28: "#6fcf9a", 29: "#5fb38a", 30: "#c7a5c9" };
+const REGION_COLORS = { cervical: "#d9a441", thoracic: "#5aa6c9", lumbar: "#8b7fd1", sacral: "#5fb38a", coccygeal: "#d9708a", disc: "#a7b2b0",
+  ribcage: "#e3b98f", cartilage: "#cfd8d4", sternum: "#e0605a", clavicle: "#6fcf9a" };
+const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Disc", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicle" };
 const DEFAULTS = {
-  level: 2, bone: "L3", view: "front", mm: 1, zoom: "fit", bg: "checker", guides: true, labels: true, colorby: "none",
+  tab: "skeleton", mode: "full", bone: "L3", ribSide: "L", view: "front", mm: 1, zoom: "fit", bg: "checker", guides: true, labels: true, colorby: "none",
+  layers: { spine: true, ribcage: true, clavicles: true },
   lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, outline: true, lines: true, gap: 3, rim: true, clusters: true,
   bone6: PRESETS["Study bone"].slice(), disc6: R.PALETTES.disc.slice(), preset: "Study bone",
 };
 let S = load();
 function load() {
-  try { const o = JSON.parse(localStorage.getItem("pixel-character-lab") || "null"); if (o) return { ...DEFAULTS, ...o, bone6: (o.bone6 || DEFAULTS.bone6).slice(), disc6: (o.disc6 || DEFAULTS.disc6).slice() }; } catch (e) { /* no storage */ }
-  return { ...DEFAULTS, bone6: DEFAULTS.bone6.slice(), disc6: DEFAULTS.disc6.slice() };
+  try {
+    const o = JSON.parse(localStorage.getItem("pixel-character-lab") || "null");
+    if (o) {
+      const s = { ...DEFAULTS, ...o, bone6: (o.bone6 || DEFAULTS.bone6).slice(), disc6: (o.disc6 || DEFAULTS.disc6).slice(), layers: { ...DEFAULTS.layers, ...(o.layers || {}) } };
+      if (!o.tab) { s.tab = "skeleton"; s.mode = o.level === 1 ? "bone" : "full"; }     // settings saved by the level-based lab
+      return s;
+    }
+  } catch (e) { /* no storage */ }
+  return { ...DEFAULTS, bone6: DEFAULTS.bone6.slice(), disc6: DEFAULTS.disc6.slice(), layers: { ...DEFAULTS.layers } };
 }
 const save = () => { try { localStorage.setItem("pixel-character-lab", JSON.stringify(S)); } catch (e) { /* ignore */ } };
+const level = () => (S.mode === "bone" ? 1 : 2);
 
 // ---------- models ----------
-const built = C.build();
-const full = { els: built.els, comps: built.els.map(C.compile) };
-const BONES = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5", "S", "Co"];
+const sk = TR.buildSkeleton();
+const full = { els: sk.els, comps: sk.els.map(C.compile) };
+const SPINE_BONES = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5", "S", "Co"];
+const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" ? "clavicles" : "spine");
 function boneModel(id) {
-  const k = full.els.findIndex((e) => e.id === id), el = { ...full.els[k], o: [0, 0, 0], psi: 0 }, comp = full.comps[k], b = comp.box;
+  const k = full.els.findIndex((e) => e.id === id), el = { ...full.els[k], o: [0, 0, 0], psi: 0, R: undefined }, comp = full.comps[k], b = comp.box;
   const span = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-  return { els: [el], comps: [comp], frameMM: Math.max(96, Math.ceil((span * 1.12) / 8) * 8), pivot: [0, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2] };
+  // pivot at the bone's box centre (vertebrae are centred on x = 0 anyway; ribs and clavicles are not)
+  return { els: [el], comps: [comp], frameMM: Math.max(96, Math.ceil((span * 1.12) / 8) * 8), pivot: [el.kind === "vertebra" || el.kind === "sacrum" || el.kind === "coccyx" || el.kind === "disc" ? 0 : (b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2] };
 }
-const RIG = window.SpineRig, ROM = window.SpineROM, rig = RIG.makeRig(built);
-const poseKey = (p) => JSON.stringify(p || RIG.ZERO());
+const rig = TR.makeRig(sk);
+const normPose = (p) => { const z = TR.ZERO(); p = p || {}; for (const k of [...ROM.REGIONS, "root"]) z[k] = { ...z[k], ...(p[k] || {}) }; for (const s of ["L", "R"]) z.clavicle[s] = { ...z.clavicle[s], ...((p.clavicle || {})[s] || {}) }; return z; };
+const poseKey = (p) => JSON.stringify(normPose(p));
 const posedCache = new Map();
 function posed(pose) {
   const k = poseKey(pose); if (posedCache.has(k)) return posedCache.get(k);
-  const m = RIG.posedModel(rig, full.comps, pose); posedCache.set(k, m); if (posedCache.size > 24) posedCache.delete(posedCache.keys().next().value); return m;
+  const m = TR.posedModel(rig, full.comps, normPose(pose)); posedCache.set(k, m); if (posedCache.size > 24) posedCache.delete(posedCache.keys().next().value); return m;
 }
-const modelFor = (level, bone, pose) => (level === 1 ? boneModel(bone) : { ...posed(pose), frameMM: R.FRAME.W * R.FRAME.mm, pivot: R.FRAME.pivot });
-if (!S.pose || !S.pose.root) S.pose = RIG.ZERO();
-let model = modelFor(S.level, S.bone, S.pose);
-function viewSpec(m, v, mm) { const W = Math.round(m.frameMM / mm); return { yaw: v.yaw, pitch: v.pitch || 0, mm, W, H: W, pivot: m.pivot, ss: S.level === 1 ? 4 : 3 }; }
+const modelFor = (lv, bone, pose) => (lv === 1 ? boneModel(bone) : { ...posed(pose), frameMM: R.FRAME.W * R.FRAME.mm, pivot: R.FRAME.pivot });
+S.pose = normPose(S.pose);
+if (!full.els.some((e) => e.id === S.bone)) S.bone = "L3";
+let model = modelFor(level(), S.bone, S.pose);
+function viewSpec(m, v, mm) { const W = Math.round(m.frameMM / mm); return { yaw: v.yaw, pitch: v.pitch || 0, mm, W, H: W, pivot: m.pivot, ss: level() === 1 ? 4 : 3 }; }
+const visible = () => full.els.map((e, k) => (S.layers[layerOf(e)] ? k : -1)).filter((k) => k >= 0);
 
 // ---------- workers ----------
-const SRC = $("core-src").textContent + "\n" + $("rom-src").textContent + "\n" + $("rig-src").textContent + "\n" + $("render-src").textContent + `
-  let FULL = null; const BONE = {};
-  let RIGW = null;
-  function full() { if (!FULL) { const b = SpineCore.build(); FULL = { els: b.els, comps: b.els.map(SpineCore.compile) }; RIGW = SpineRig.makeRig(b); } return FULL; }
-  function bone(id) { if (!BONE[id]) { const F = full(), k = F.els.findIndex((e) => e.id === id); BONE[id] = { els: [{ ...F.els[k], o: [0, 0, 0], psi: 0 }], comps: [F.comps[k]] }; } return BONE[id]; }
+const SRC = ["core-src", "rom-src", "rig-src", "thorax-src", "thorax-rig-src", "render-src"].map((id) => $(id).textContent).join("\n") + `
+  let SK = null, FULL = null, RIGW = null; const BONE = {};
+  function full() { if (!FULL) { SK = ThoraxRig.buildSkeleton(); FULL = { els: SK.els, comps: SK.els.map(SpineCore.compile) }; RIGW = ThoraxRig.makeRig(SK); } return FULL; }
+  function bone(id) { if (!BONE[id]) { const F = full(), k = F.els.findIndex((e) => e.id === id); BONE[id] = { els: [{ ...F.els[k], o: [0, 0, 0], psi: 0, R: undefined }], comps: [F.comps[k]] }; } return BONE[id]; }
   self.onmessage = (ev) => {
-    const q = ev.data, M = q.level === 1 ? bone(q.bone) : (full(), SpineRig.posedModel(RIGW, FULL.comps, q.pose));
+    const q = ev.data, M = q.level === 1 ? bone(q.bone) : (full(), ThoraxRig.posedModel(RIGW, FULL.comps, q.pose));
     const g = SpineRender.cast(M, q.view, (p) => self.postMessage({ id: q.id, progress: p }), q.only);
     self.postMessage({ id: q.id, g }, [g.idx.buffer, g.depth.buffer, g.nx.buffer, g.ny.buffer, g.nz.buffer, g.ao.buffer, g.part.buffer, g.obj.buffer]);
   };`;
 let workers = [];
 try { const url = URL.createObjectURL(new Blob([SRC], { type: "text/javascript" })); const n = Math.max(1, Math.min(6, (navigator.hardwareConcurrency || 4) - 1)); for (let i = 0; i < n; i++) workers.push(new Worker(url)); }
 catch (e) { workers = []; }
-const cost = full.comps.map((c) => (c.box[3] - c.box[0] + c.box[4] - c.box[1]) * (c.box[4] - c.box[1] + c.box[5] - c.box[2]));
-const shares = Array.from({ length: Math.max(1, workers.length) }, () => ({ k: [], c: 0 }));
-cost.map((c, k) => [c, k]).sort((a, b) => b[0] - a[0]).forEach(([c, k]) => { const s = shares.reduce((a, b) => (a.c <= b.c ? a : b)); s.k.push(k); s.c += c; });
+const cost = full.comps.map((c) => (c.box[3] - c.box[0] + c.box[4] - c.box[1]) * (c.box[4] - c.box[1] + c.box[5] - c.box[2]) * (c.chunks ? 0.35 : 1));
+function sharesFor(ks) {
+  const sh = Array.from({ length: Math.max(1, workers.length) }, () => ({ k: [], c: 0 }));
+  ks.map((k) => [cost[k], k]).sort((a, b) => b[0] - a[0]).forEach(([c, k]) => { const s = sh.reduce((a, b) => (a.c <= b.c ? a : b)); s.k.push(k); s.c += c; });
+  return sh;
+}
 
 const cache = new Map(); let jobId = 0;
-function geometry(level, bone, viewId, mm, onProgress, pose) {
-  pose = pose || S.pose;
-  const key = `${level}|${level === 1 ? bone : poseKey(pose)}|${viewId}|${mm}`;
+function geometry(lv, bone, viewId, mm, onProgress, pose) {
+  pose = normPose(pose || S.pose);
+  const vis = visible(), key = `${lv}|${lv === 1 ? bone : poseKey(pose) + "|" + vis.length + ":" + JSON.stringify(S.layers)}|${viewId}|${mm}`;
   if (cache.has(key)) return Promise.resolve(cache.get(key));
-  const m = modelFor(level, bone, pose), v = VIEWS.find((x) => x.id === viewId), view = viewSpec(m, v, mm);
-  if (!workers.length) return new Promise((res) => setTimeout(() => { const g = R.cast(m, view); cache.set(key, g); res(g); }, 10));
+  const m = modelFor(lv, bone, pose), v = VIEWS.find((x) => x.id === viewId), view = viewSpec(m, v, mm);
+  if (!workers.length) return new Promise((res) => setTimeout(() => { const g = R.cast(m, view, null, lv === 1 ? null : vis); cache.set(key, g); res(g); }, 10));
   const id = ++jobId;
-  const jobs = level === 1 ? [{ w: workers[0], only: null }] : workers.map((w, i) => ({ w, only: shares[i].k }));
+  const jobs = lv === 1 ? [{ w: workers[0], only: null }] : sharesFor(vis).map((s, i) => ({ w: workers[i], only: s.k })).filter((j) => j.only.length);
   const prog = jobs.map(() => 0);
   return Promise.all(jobs.map((j, i) => new Promise((res) => {
     const h = (ev) => { if (ev.data.id !== id) return; if (ev.data.g) { j.w.removeEventListener("message", h); res(ev.data.g); } else { prog[i] = ev.data.progress; onProgress && onProgress(prog.reduce((a, b) => a + b, 0) / prog.length); } };
-    j.w.addEventListener("message", h); j.w.postMessage({ id, level, bone, view, only: j.only, pose });
+    j.w.addEventListener("message", h); j.w.postMessage({ id, level: lv, bone, view, only: j.only, pose });
   }))).then((parts) => {
-    const g = R.merge(parts);
+    const g = parts.length ? R.merge(parts) : R.cast(m, view, null, []);
     cache.set(key, g); if (cache.size > 40) cache.delete(cache.keys().next().value);
     return g;
   });
@@ -1435,6 +2251,7 @@ function geometry(level, bone, viewId, mm, onProgress, pose) {
 let geo = null, st = null, hoverObj = 0;
 const styleOf = () => ({ lightDir: S.lightDir, lightFront: S.lightFront, ambient: S.ambient, aoStr: S.aoStr, exposure: S.exposure, gap: S.gap, outline: S.outline, lines: S.lines, rim: S.rim, clusters: S.clusters });
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
+const regionOf = (el) => (el.kind === "disc" ? "disc" : el.region);
 function pixels(forExport) {
   const rgba = R.paint(st, model, { bone: S.bone6, disc: S.disc6 });
   if (forExport) return rgba;
@@ -1443,7 +2260,7 @@ function pixels(forExport) {
     for (let p = 0; p < st.W * st.H; p++) {
       const v = st.lab[p]; if (!v || v === 1) continue;
       const el = model.els[st.obj[p] - 1];
-      const c = hex(S.colorby === "part" ? PART_COLORS[st.part[p]] || "#888888" : REGION_COLORS[el.kind === "disc" ? "disc" : el.region]);
+      const c = hex(S.colorby === "part" ? PART_COLORS[st.part[p]] || "#888888" : REGION_COLORS[regionOf(el)] || "#888888");
       rgba[p * 4] = c[0] * mul[v]; rgba[p * 4 + 1] = c[1] * mul[v]; rgba[p * 4 + 2] = c[2] * mul[v];
     }
   }
@@ -1455,7 +2272,7 @@ function zoomFor() {
   const el = $("stage"); return Math.max(1, Math.floor(Math.min((el.clientWidth - 44) / st.W, (el.clientHeight - 70) / st.H)));
 }
 function draw() {
-  if (!st) return;
+  if (!st || S.tab !== "skeleton") return;
   const z = zoomFor(), cv = $("cv");
   const off = document.createElement("canvas"); off.width = st.W; off.height = st.H;
   off.getContext("2d").putImageData(new ImageData(pixels(false), st.W, st.H), 0, 0);
@@ -1471,49 +2288,64 @@ function draw() {
   }
   drawLabels(z);
 }
+// labels: vertebrae on one side of the column, rib numbers at the lateral edge of the cage
 function drawLabels(z) {
   const box = $("lbl-layer"); box.innerHTML = "";
-  if (S.level !== 2 || !S.labels) return;
+  if (level() !== 2 || !S.labels) return;
   const v = VIEWS.find((x) => x.id === S.view), spec = viewSpec(model, v, S.mm), side = Math.sin((v.yaw * Math.PI) / 180);
-  for (const el of model.els) {
-    if (el.kind === "disc") continue;
-    const p = R.project(el.o, spec), d = document.createElement("span");
-    d.className = "lbl"; d.textContent = el.id; d.style.top = p[1] * z + "px";
-    if (side > 0.3) { d.style.left = (p[0] + 44 / S.mm) * z + "px"; } else { d.style.left = (p[0] - 50 / S.mm) * z + "px"; d.classList.add("l"); }
-    box.appendChild(d);
+  const put = (p, text, right) => { const d = document.createElement("span"); d.className = "lbl" + (right ? "" : " l"); d.textContent = text; d.style.top = p[1] * z + "px"; d.style.left = p[0] * z + "px"; box.appendChild(d); };
+  if (S.layers.spine) for (const el of model.els) {
+    if (!["vertebra", "sacrum", "coccyx"].includes(el.kind)) continue;
+    const p = R.project(el.o, spec);
+    // with the rib cage shown in front / back views, vertebra names sit outside the cage on the viewer's left
+    const off = S.layers.ribcage && Math.abs(side) < 0.75 && el.region !== "lumbar" && el.kind === "vertebra" && el.id !== "C1" && !/^C[2-6]$/.test(el.id) ? 175 : 50;
+    if (side > 0.3) put([p[0] + 44 / S.mm, p[1]], el.id, true); else put([p[0] - off / S.mm, p[1]], el.id, false);
+  }
+  if (S.layers.ribcage && Math.abs(side) < 0.75) {
+    // rib numbers on the subject's side that faces the viewer's right
+    const ribSide = Math.cos((v.yaw * Math.PI) / 180) >= 0 ? "L" : "R";
+    model.els.forEach((el, k) => {
+      if (el.kind !== "rib" || el.side !== ribSide) return;
+      const rest = full.els[k]; let best = null, bx = -1e9;
+      for (const nd of rest.geo.nodes) { const q = R.project(C.toWorld(el, [nd.p[0] - rest.o[0], nd.p[1] - rest.o[1], nd.p[2] - rest.o[2]]), spec); if (q[0] > bx) { bx = q[0]; best = q; } }
+      if (best) put([best[0] + 8 / S.mm, best[1]], String(el.n), true);
+    });
   }
 }
 let restyleT = 0;
 function restyle() { cancelAnimationFrame(restyleT); restyleT = requestAnimationFrame(() => { if (!geo) return; st = R.stylise(geo, model, styleOf()); draw(); }); }
 let token = 0;
 async function render() {
-  model = modelFor(S.level, S.bone, S.pose); stopPlay();
+  stopPlay();
+  if (S.tab === "skeleton") model = modelFor(level(), S.bone, S.pose);
   save(); sync();
+  if (S.tab !== "skeleton") return;
   const t = ++token; $("busy").hidden = false; $("busy").textContent = "Rendering…";
-  const g = await geometry(S.level, S.bone, S.view, S.mm, (p) => { if (t === token) $("busy").textContent = `Rendering… ${Math.round(p * 100)}%`; });
+  const g = await geometry(level(), S.bone, S.view, S.mm, (p) => { if (t === token) $("busy").textContent = `Rendering… ${Math.round(p * 100)}%`; });
   if (t !== token) return;
   geo = g; st = R.stylise(geo, model, styleOf()); $("busy").hidden = true;
   const v = VIEWS.find((x) => x.id === S.view);
-  const what = S.level === 1 ? (model.els[0].name || S.bone) : "Spinal column";
+  const what = level() === 1 ? (model.els[0].name || S.bone) : ["Spine", "rib cage", "clavicles"].filter((_, i) => S.layers[["spine", "ribcage", "clavicles"][i]]).join(", ") || "Nothing shown";
   $("caption").textContent = `${what} · ${v.name}${v.pitch ? " (reference)" : ", eye level"} · ${st.W} × ${st.H} px frame at ${S.mm} mm/px · ${zoomFor()}×`;
   draw();
   updatePoseUI();
 }
 
 // ---------- hover ----------
-const defaultStatus = () => S.level === 1
+const counts = () => { const c = (k) => full.els.filter((e) => e.kind === k).length; return `24 vertebrae, sacrum, coccyx, ${c("disc")} discs · ${c("rib")} ribs, ${c("cartilage")} costal cartilages, sternum · 2 clavicles`; };
+const defaultStatus = () => level() === 1
   ? `${model.els[0].name || S.bone} · hover to read pixels and anatomy`
-  : `C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs · ${full.els.length} separately editable elements · hover to identify`;
+  : `${counts()} · ${full.els.length} separately editable elements · hover to identify`;
 $("cv").addEventListener("mousemove", (e) => {
   if (!st) return;
   const r = e.target.getBoundingClientRect(), x = Math.floor(((e.clientX - r.left) / r.width) * st.W), y = Math.floor(((e.clientY - r.top) / r.height) * st.H);
   if (x < 0 || y < 0 || x >= st.W || y >= st.H) return;
   const p = y * st.W + x, o = st.lab[p] ? st.obj[p] : 0;
   const dy = (st.H / 2 - y - 0.5) * S.mm;
-  let text = S.level === 2 ? `px ${x}, ${y} · ${Math.round(model.pivot[1] + dy)} mm above the floor` : `px ${x}, ${y} · ${(dy).toFixed(0)} mm from pivot`;
-  if (o) { const el = model.els[o - 1]; text = `${el.name} · ${C.PART_NAMES[st.part[p]] || ""} · ${text}`; }
+  let text = level() === 2 ? `px ${x}, ${y} · ${Math.round(model.pivot[1] + dy)} mm above the floor` : `px ${x}, ${y} · ${(dy).toFixed(0)} mm from pivot`;
+  if (o) { const el = model.els[o - 1]; text = `${el.name} · ${C.PART_NAMES[st.part[p]] || ""}${el.kind === "cartilage" && el.chordRatio ? ` · ends ${(el.chordRatio * 100).toFixed(1)} % of rest` : ""} · ${text}`; }
   $("status").textContent = text;
-  if (o !== hoverObj && S.level === 2) { hoverObj = o; draw(); }
+  if (o !== hoverObj && level() === 2) { hoverObj = o; draw(); }
 });
 $("cv").addEventListener("mouseleave", () => { if (hoverObj) { hoverObj = 0; draw(); } $("status").textContent = defaultStatus(); });
 
@@ -1526,19 +2358,25 @@ function seg(id, items, key, after) {
     el.appendChild(b);
   }
 }
-const nav = $("levels");
-LEVELS.forEach((L) => {
-  const b = document.createElement("button"); b.type = "button"; b.dataset.val = L.n; b.disabled = !!L.off;
-  b.innerHTML = `<b>${L.name}</b><span>${L.sub}</span>`;
-  b.addEventListener("click", () => { if (L.off) return; S.level = L.n; if (S.level === 2 && S.view === "top") S.view = "front"; hoverObj = 0; render(); });
+const nav = $("tabs");
+TABS.forEach((T) => {
+  const b = document.createElement("button"); b.type = "button"; b.dataset.val = T.id; b.setAttribute("role", "tab");
+  b.innerHTML = `<b>${T.name}</b><span>${T.sub}</span>`;
+  b.addEventListener("click", () => { S.tab = T.id; hoverObj = 0; render(); });
   nav.appendChild(b);
 });
-seg("bones", BONES.map((b) => [b, b]), "bone", render);
+seg("mode", [["full", "Whole skeleton"], ["bone", "Single bone"]], "mode", () => { if (S.mode === "full" && S.view === "top") S.view = "front"; hoverObj = 0; render(); });
+seg("bones", SPINE_BONES.map((b) => [b, b]), "bone", render);
+seg("ribs", Array.from({ length: 12 }, (_, i) => [`RIB${i + 1}_${S.ribSide}`, String(i + 1)]), "bone", render);
+const ribButtons = () => $("ribs").querySelectorAll("button").forEach((b, i) => { b.dataset.val = `RIB${i + 1}_${S.ribSide}`; });
+seg("rib-side", [["L", "Left"], ["R", "Right"]], "ribSide", () => { ribButtons(); if (/^RIB/.test(S.bone)) S.bone = S.bone.replace(/_[LR]$/, "_" + S.ribSide); render(); });
+seg("girdle", [["STERNUM", "Sternum"], ["CLAV_L", "Clavicle L"], ["CLAV_R", "Clavicle R"]], "bone", render);
 seg("views", VIEWS.map((v) => [v.id, SHORT[v.id]]), "view", render);
 seg("mm", [1, 1.5, 2, 3, 4].map((v) => [v, String(v)]), "mm", render);
 seg("zoom", [["fit", "Fit"], ...[1, 2, 3, 4, 6, 8].map((v) => [v, v + "×"])], "zoom", () => { save(); sync(); draw(); });
 seg("bg", [["checker", "Clear"], ["dark", "Dark"], ["mid", "Grey"], ["light", "Light"], ["skin", "Skin"]], "bg", () => { save(); sync(); draw(); });
 seg("colorby", [["none", "Palette"], ["part", "Anatomy"], ["region", "Region"]], "colorby", () => { save(); sync(); draw(); });
+for (const k of ["spine", "ribcage", "clavicles"]) $(`layer-${k}`).addEventListener("change", (e) => { S.layers[k] = e.target.checked; hoverObj = 0; render(); });
 const RANGES = { lightDir: (v) => v + "°", lightFront: (v) => v + "°", ambient: (v) => v.toFixed(2), aoStr: (v) => v.toFixed(2), exposure: (v) => v.toFixed(2), gap: (v) => v.toFixed(1) + " mm" };
 for (const k in RANGES) $(k).addEventListener("input", () => { S[k] = +$(k).value; $(k + "-out").textContent = RANGES[k](S[k]); save(); restyle(); });
 for (const k of ["outline", "lines", "rim", "clusters"]) $(k).addEventListener("change", () => { S[k] = $(k).checked; save(); sync(); restyle(); });
@@ -1556,21 +2394,23 @@ function palRow(id, key, from) {
 palRow("pal-bone", "bone6", 0); palRow("pal-disc", "disc6", 1);
 $("preset").innerHTML = Object.keys(PRESETS).map((k) => `<option value="${k}">${k}</option>`).join("") + `<option value="">Custom</option>`;
 $("preset").addEventListener("change", (e) => { if (PRESETS[e.target.value]) { S.bone6 = PRESETS[e.target.value].slice(); S.preset = e.target.value; save(); sync(); draw(); } });
-$("reset").addEventListener("click", () => { const keep = { level: S.level, bone: S.bone, view: S.view }; S = { ...DEFAULTS, bone6: DEFAULTS.bone6.slice(), disc6: DEFAULTS.disc6.slice(), ...keep }; render(); });
+$("reset").addEventListener("click", () => { const keep = { tab: S.tab, mode: S.mode, bone: S.bone, view: S.view, pose: S.pose }; S = { ...DEFAULTS, bone6: DEFAULTS.bone6.slice(), disc6: DEFAULTS.disc6.slice(), layers: { ...DEFAULTS.layers }, ...keep }; render(); });
 $("copy").addEventListener("click", async () => {
-  const txt = JSON.stringify({ mmPerPx: S.mm, bone: Object.fromEntries(SLOT.map((s, i) => [s, S.bone6[i]])), disc: Object.fromEntries(SLOT.slice(1).map((s, i) => [s, S.disc6[i + 1]])),
+  const txt = JSON.stringify({ mmPerPx: S.mm, bone: Object.fromEntries(SLOT.map((s, i) => [s, S.bone6[i]])), cartilageAndDisc: Object.fromEntries(SLOT.slice(1).map((s, i) => [s, S.disc6[i + 1]])),
     light: { direction: S.lightDir, towardViewer: S.lightFront }, ambient: S.ambient, crevice: S.aoStr, exposure: S.exposure,
     rules: { outline: S.outline, interiorLines: S.lines, lineGapMm: S.gap, rimLight: S.rim, clusters: S.clusters } }, null, 2);
   try { await navigator.clipboard.writeText(txt); flash("Style settings copied as JSON."); } catch (e) { flash("The browser blocked the clipboard."); }
 });
 function sync() {
-  $("app").dataset.level = S.level;
-  nav.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(+b.dataset.val === S.level)));
+  $("app").dataset.tab = S.tab; $("app").dataset.level = level();
+  nav.querySelectorAll("button").forEach((b) => { const on = b.dataset.val === S.tab; b.setAttribute("aria-selected", String(on)); b.setAttribute("aria-pressed", String(on)); });
   const mark = (id, val) => $(id).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.val === String(val))));
-  mark("bones", S.bone); mark("views", S.view); mark("mm", S.mm); mark("zoom", S.zoom); mark("bg", S.bg); mark("colorby", S.colorby);
-  $("views").querySelector('[data-val="top"]').disabled = S.level !== 1;
-  $("colorby").querySelector('[data-val="region"]').disabled = S.level !== 2;
-  $("bone-name").textContent = S.level === 1 ? (full.els.find((e) => e.id === S.bone).name || "") : "";
+  mark("mode", S.mode); mark("bones", S.bone); mark("ribs", S.bone); mark("rib-side", S.ribSide); mark("girdle", S.bone);
+  mark("views", S.view); mark("mm", S.mm); mark("zoom", S.zoom); mark("bg", S.bg); mark("colorby", S.colorby);
+  $("views").querySelector('[data-val="top"]').disabled = level() !== 1;
+  $("colorby").querySelector('[data-val="region"]').disabled = level() !== 2;
+  const b = full.els.find((e) => e.id === S.bone); $("bone-name").textContent = level() === 1 && b ? b.name : "";
+  for (const k of ["spine", "ribcage", "clavicles"]) $(`layer-${k}`).checked = S.layers[k];
   for (const k in RANGES) { $(k).value = S[k]; $(k + "-out").textContent = RANGES[k](S[k]); }
   for (const k of ["outline", "lines", "rim", "clusters", "guides", "labels"]) $(k).checked = S[k];
   $("gap").disabled = !S.lines;
@@ -1580,11 +2420,11 @@ function sync() {
   if (S.colorby === "none") lg.hidden = true;
   else {
     lg.hidden = false;
-    const items = S.colorby === "region" ? Object.entries(REGION_COLORS).map(([k, c]) => [k[0].toUpperCase() + k.slice(1), c])
+    const items = S.colorby === "region" ? Object.entries(REGION_COLORS).map(([k, c]) => [REGION_NAMES[k], c])
       : [...new Set(Object.keys(C.PART_NAMES).map(Number))].filter((k) => k !== 18).map((k) => [C.PART_NAMES[k], PART_COLORS[k]]);
     lg.innerHTML = items.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("");
   }
-  $("status").textContent = defaultStatus();
+  $("status").textContent = S.tab === "skeleton" ? defaultStatus() : `${TABS.find((t) => t.id === S.tab).name}: no artwork yet`;
 }
 let flashT; function flash(m) { const el = $("toast"); el.textContent = m; el.hidden = false; clearTimeout(flashT); flashT = setTimeout(() => (el.hidden = true), 2400); }
 new ResizeObserver(() => { if (S.zoom === "fit") draw(); }).observe($("stage"));
@@ -1594,21 +2434,21 @@ let downloads = null;
 const inClaude = () => !!(window.claude && typeof window.claude.use === "function");
 (function initDl() { let n = 0; const tick = () => { if (inClaude()) { window.claude.use("downloads").then((d) => { downloads = d; if (!d) $("save").hidden = true; }).catch(() => {}); return; } if (++n < 6) setTimeout(tick, 500); }; tick(); })();
 $("save").addEventListener("click", async () => {
-  if (!st) return;
+  if (!st || S.tab !== "skeleton") return;
   const off = document.createElement("canvas"); off.width = st.W; off.height = st.H;
   off.getContext("2d").putImageData(new ImageData(pixels(true), st.W, st.H), 0, 0);
   const blob = await new Promise((res) => off.toBlob(res, "image/png"));
-  const name = `${S.level === 1 ? "vertebra_" + S.bone : "spine"}_${S.view}_${S.mm}mm.png`;
+  const name = `${level() === 1 ? "bone_" + S.bone : "skeleton"}_${S.view}_${S.mm}mm.png`;
   if (downloads) { try { await downloads.save({ filename: name, data: blob }); flash("Saved " + name); } catch (e) { if (e && e.code === "declined") flash("Save cancelled."); } }
   else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); flash("Downloaded " + name); }
 });
-// ---------- pose: regional controls, demonstrations, playback ----------
-const DEMOS = RIG.demoPoses();
+// ---------- pose: regional controls, clavicles, demonstrations, playback ----------
+const DEMOS = TR.demoPoses();
 const AXES = [["fe", "Flex · Ext", (l) => [-l.ext, l.flex]], ["lb", "Bend L · R", (l) => [-l.lb, l.lb]], ["ar", "Rotate L · R", (l) => [-l.ar, l.ar]]];
 const RNAME = { cervical: "Cervical (C1–T1)", thoracic: "Thoracic (T1–L1)", lumbar: "Lumbar (L1–S1)" };
 const ps = $("pose-sliders");
 for (const r of ROM.REGIONS) {
-  const l = RIG.regionLimits(r), h = document.createElement("div");
+  const l = SR.regionLimits(r), h = document.createElement("div");
   h.className = "region-h"; h.innerHTML = `${RNAME[r]}<span id="env-${r}"></span>`; ps.appendChild(h);
   for (const [ax, label, rng] of AXES) {
     const [lo, hi] = rng(l), row = document.createElement("div"); row.className = "range pose";
@@ -1625,34 +2465,58 @@ for (const [ax, label, lim] of ROOT) {
   $("root-sliders").appendChild(row);
   row.querySelector("input").addEventListener("input", (e) => { S.pose.root[ax] = +e.target.value; onPose(); });
 }
+// clavicles: each side separately controllable (sternoclavicular joint); optional mirroring
+const CL = TR.clavLimits(), CLAX = [["elev", "Elevation", CL.elev], ["prot", "Protraction", CL.prot], ["rot", "Post. rotation", CL.rot]];
+if (S.clavLink === undefined) S.clavLink = true;
+for (const side of ["L", "R"]) {
+  const h = document.createElement("div"); h.className = "region-h"; h.innerHTML = `Clavicle ${side === "L" ? "left" : "right"}<span id="clav-env-${side}"></span>`; $("clav-sliders").appendChild(h);
+  for (const [ax, label, rng] of CLAX) {
+    const row = document.createElement("div"); row.className = "range pose";
+    row.innerHTML = `<label for="c-${side}-${ax}">${label}</label><input type="range" id="c-${side}-${ax}" min="${rng[0].toFixed(1)}" max="${rng[1].toFixed(1)}" step="0.5"><output id="c-${side}-${ax}-out"></output>`;
+    $("clav-sliders").appendChild(row);
+    row.querySelector("input").addEventListener("input", (e) => { const v = +e.target.value; S.pose.clavicle[side][ax] = v; if (S.clavLink) S.pose.clavicle[side === "L" ? "R" : "L"][ax] = v; onPose(); });
+  }
+}
+$("clav-link").addEventListener("change", (e) => { S.clavLink = e.target.checked; save(); });
 if (S.sacrumFixed === undefined) S.sacrumFixed = true;
 $("sacrum-fixed").addEventListener("change", (e) => { S.sacrumFixed = e.target.checked; if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 }; onPose(); });
 DEMOS.forEach((d) => {
   const b = document.createElement("button"); b.type = "button"; b.textContent = d.name; b.dataset.val = d.id;
-  b.addEventListener("click", () => { S.pose = JSON.parse(JSON.stringify(d.pose)); onPose(true); });
+  b.addEventListener("click", () => { S.pose = normPose(JSON.parse(JSON.stringify(d.pose))); onPose(true); });
   $("demos").appendChild(b);
 });
-$("to-neutral").addEventListener("click", () => { S.pose = RIG.ZERO(); onPose(true); });
+$("to-neutral").addEventListener("click", () => { S.pose = TR.ZERO(); onPose(true); });
 let poseT = 0;
 function onPose(now) { stopPlay(); updatePoseUI(); save(); clearTimeout(poseT); poseT = setTimeout(render, now ? 0 : 350); }
 const fmt = (v) => (v > 0 ? "+" : "") + v.toFixed(1) + "°";
 function updatePoseUI() {
-  if (S.level !== 2) return;
-  const sol = RIG.solve(S.pose);
+  if (level() !== 2 || S.tab !== "skeleton") return;
+  const sol = SR.solve(S.pose);
   for (const r of ROM.REGIONS) {
     for (const [ax] of AXES) { const v = S.pose[r][ax], shown = ax === "fe" ? v : -v; $(`p-${r}-${ax}`).value = shown; $(`p-${r}-${ax}-out`).textContent = fmt(v); }
     const e = sol.regions[r].envelope; $(`env-${r}`).textContent = e ? `${Math.round(Math.min(1, e) * 100)} % of envelope${sol.regions[r].scaled ? " (scaled)" : ""}` : "";
   }
   for (const [ax] of ROOT) { $(`p-root-${ax}`).value = S.pose.root[ax]; $(`p-root-${ax}-out`).textContent = fmt(S.pose.root[ax]); $(`p-root-${ax}`).disabled = S.sacrumFixed; }
-  $("sacrum-fixed").checked = S.sacrumFixed;
-  const d = DEMOS.find((x) => JSON.stringify(x.pose) === JSON.stringify(S.pose));
-  $("pose-state").textContent = RIG.isZero(S.pose) ? "neutral" : d ? d.name.toLowerCase() : "custom";
+  $("sacrum-fixed").checked = S.sacrumFixed; $("clav-link").checked = S.clavLink;
+  for (const side of ["L", "R"]) {
+    for (const [ax] of CLAX) { const v = S.pose.clavicle[side][ax]; $(`c-${side}-${ax}`).value = v; $(`c-${side}-${ax}-out`).textContent = fmt(v); }
+    const q = TR.clavSolve(S.pose.clavicle[side]); $(`clav-env-${side}`).textContent = q.envelope ? `${Math.round(Math.min(1, q.envelope) * 100)} %${q.scaled ? " (scaled)" : ""}` : "";
+  }
+  const key = poseKey(S.pose), d = DEMOS.find((x) => poseKey(x.pose) === key);
+  $("pose-state").textContent = TR.isZero(S.pose) ? "neutral" : d ? d.name.toLowerCase() : "custom";
   $("demos").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(!!d && b.dataset.val === d.id)));
   // per-segment readout: angle and share of that segment's cap
   const rows = ROM.SEGMENTS.map((s) => { const a = sol.segments[s.id], c = Math.max(Math.abs(a.fe) / (a.fe >= 0 ? s.cap.flex : s.cap.ext), Math.abs(a.lb) / s.cap.lb, Math.abs(a.ar) / s.cap.ar);
     return `<tr><td>${s.id}</td><td>${a.fe.toFixed(1)}</td><td>${a.lb.toFixed(1)}</td><td>${a.ar.toFixed(1)}</td><td class="bar">${Math.round(c * 100)}%</td></tr>`; }).join("");
   $("seg-table").innerHTML = `<table><tr><th>Segment</th><th>Flex</th><th>Bend L</th><th>Rot L</th><th>of cap</th></tr>${rows}</table>`;
-  $("play").disabled = RIG.isZero(S.pose);
+  // rib cage response to the current spinal pose
+  const m = posed(S.pose), th = m.thorax;
+  if (!th) $("ribcage-state").textContent = "Rib cage at rest.";
+  else {
+    const cv = Math.max(...Object.values(th.theta).map(Math.abs)), ch = Object.values(th.chord), ar = Object.values(th.stretch);
+    $("ribcage-state").textContent = `Rib cage: ribs turn up to ${cv.toFixed(1)}° at their costovertebral joints; cartilage ends ${(Math.min(...ch) * 100).toFixed(1)}–${(Math.max(...ch) * 100).toFixed(1)} % of rest distance, cartilage length ${(Math.max(...ar) * 100).toFixed(1)} % at most.`;
+  }
+  $("play").disabled = TR.isZero(S.pose);
 }
 // playback: neutral -> pose -> neutral, eased (in-out sine, as in pixelfx); five unique poses rendered once, then reused
 const FRACS = [0, 0.1464, 0.5, 0.8536, 1], SEQ = [0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 0, 0];
@@ -1665,7 +2529,7 @@ $("play").addEventListener("click", async () => {
   for (let i = 0; i < FRACS.length; i++) {
     if (!playing) return;
     $("busy").hidden = false; $("busy").textContent = `Preparing playback ${i + 1}/${FRACS.length}…`;
-    const p = RIG.scalePose(target, FRACS[i]), g = await geometry(2, "", view, mmv, null, p), m = modelFor(2, "", p);
+    const p = TR.scalePose(target, FRACS[i]), g = await geometry(2, "", view, mmv, null, p), m = modelFor(2, "", p);
     frames.push({ st: R.stylise(g, m, styleOf()), m });
   }
   $("busy").hidden = true; if (!playing) return;

@@ -33,13 +33,13 @@ header small { color: var(--muted); }
 .btn { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
 .btn:hover { border-color: var(--muted); }
 
-/* level stepper */
+/* main tabs */
 .levels { grid-column: 1 / -1; display: flex; gap: 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
 .levels button { display: grid; gap: 1px; text-align: left; border: 0; border-right: 1px solid var(--line); background: transparent; padding: 9px 18px 8px; cursor: pointer; min-width: 150px; position: relative; }
 .levels button b { font-family: var(--f-display); font-weight: 500; font-size: 15px; }
 .levels button span { color: var(--muted); font-size: 12px; }
-.levels button[aria-pressed="true"] { background: var(--panel); }
-.levels button[aria-pressed="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
+.levels button[aria-selected="true"] { background: var(--panel); }
+.levels button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
 .levels button:disabled { cursor: default; opacity: 0.45; }
 
 .rail { grid-row: 3 / 5; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding-bottom: 18px; }
@@ -73,6 +73,15 @@ select { background: var(--raise); border: 1px solid var(--line); border-radius:
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
 .legend[hidden] { display: none; }
 [data-level="1"] .only2, [data-level="2"] .only1 { display: none; }
+[data-tab="body"] .skel, [data-tab="clothing"] .skel { display: none; }
+[data-tab="skeleton"] .empty { display: none; }
+.empty { max-width: 460px; margin: 60px auto; padding: 22px 24px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+.empty b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
+.sub-h { font-size: 12px; color: var(--muted); margin-top: 2px; }
+.ribs { grid-template-columns: repeat(6, 1fr); }
+.ribs button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
+#ribcage-state { font-size: 12px; color: var(--muted); margin: 0; }
+.stack { display: grid; gap: 6px; }
 
 .row { display: flex; gap: 6px; flex-wrap: wrap; }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
@@ -104,17 +113,26 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 </style>
 </head>
 <body>
-<div class="app" id="app" data-level="1">
+<div class="app" id="app" data-tab="skeleton" data-level="2">
   <header>
-    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm · one 3D model per level, rendered to pixel art in the browser</small>
+    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm, 78 kg · one 3D model, rendered to pixel art in the browser</small>
     <div class="spacer"></div>
-    <button class="btn" type="button" id="save">Save PNG</button>
-    <button class="btn" type="button" id="copy">Copy style JSON</button>
+    <button class="btn skel" type="button" id="save">Save PNG</button>
+    <button class="btn skel" type="button" id="copy">Copy style JSON</button>
   </header>
-  <nav class="levels" id="levels" aria-label="Build level"></nav>
+  <nav class="levels" id="tabs" role="tablist" aria-label="Character"></nav>
 
   <aside class="rail" aria-label="Controls">
-    <section class="group only2" id="pose-group">
+    <section class="group skel">
+      <h2>Skeleton</h2>
+      <div class="seg" id="mode" role="group" aria-label="Show"></div>
+      <div class="only2 stack">
+        <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine (vertebrae, discs, sacrum, coccyx)</label>
+        <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage (12 rib pairs, costal cartilages, sternum)</label>
+        <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+      </div>
+    </section>
+    <section class="group only2 skel" id="pose-group">
       <h2>Pose <span id="pose-state">neutral</span></h2>
       <div class="chips" id="demos" role="group" aria-label="Demonstration poses"></div>
       <div class="row"><button class="btn primary" type="button" id="play">Play</button><button class="btn" type="button" id="to-neutral">Reset to neutral</button></div>
@@ -123,18 +141,31 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <div id="root-sliders"></div>
       <details id="seg-details"><summary>Segment angles</summary><div id="seg-table"></div></details>
       <p class="hint">Regional controls are spread over the motion segments by their measured share. Limits: 85 % of mean active ranges; combined motions share one envelope.</p>
+      <p id="ribcage-state"></p>
     </section>
-    <section class="group only1">
+    <section class="group only2 skel">
+      <h2>Clavicles <span>sternoclavicular joint</span></h2>
+      <label class="check" for="clav-link"><input type="checkbox" id="clav-link"> Move both together</label>
+      <div id="clav-sliders"></div>
+      <p class="hint">Each clavicle hangs from the manubrium, never from the spine. Limits: 85 % of textbook ranges; one envelope per side.</p>
+    </section>
+    <section class="group only1 skel">
       <h2>Bone <span id="bone-name"></span></h2>
-      <div class="chips bones" id="bones" role="group" aria-label="Bone"></div>
-      <p class="hint">Any single element of the column, in its own upright frame. L3 is the approved style study.</p>
+      <div class="sub-h">Spine</div>
+      <div class="chips bones" id="bones" role="group" aria-label="Vertebra"></div>
+      <div class="sub-h">Ribs</div>
+      <div class="seg" id="rib-side" role="group" aria-label="Rib side"></div>
+      <div class="chips ribs" id="ribs" role="group" aria-label="Rib"></div>
+      <div class="sub-h">Sternum and clavicles</div>
+      <div class="chips" id="girdle" role="group" aria-label="Sternum and clavicles"></div>
+      <p class="hint">Any single bone in its own frame. L3 is the approved style study.</p>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Camera angle</h2>
       <div class="chips" id="views" role="group" aria-label="View"></div>
       <p class="hint">Fixed eye-level angles about one pivot: a point keeps the same screen height in every view.</p>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Pixel scale <span>mm per pixel</span></h2>
       <div class="seg" id="mm" role="group" aria-label="Millimetres per pixel"></div>
       <h2>Zoom</h2>
@@ -142,14 +173,14 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <h2>Background</h2>
       <div class="seg" id="bg" role="group" aria-label="Background"></div>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Overlays</h2>
       <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
-      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Vertebra labels</label>
+      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Labels (vertebrae, rib numbers)</label>
       <div class="seg" id="colorby" role="group" aria-label="Colour by"></div>
       <div class="legend" id="legend" hidden></div>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Light</h2>
       <div class="range"><label for="lightDir">Direction</label><input type="range" id="lightDir" min="0" max="355" step="1"><output id="lightDir-out"></output></div>
       <div class="range"><label for="lightFront">Toward viewer</label><input type="range" id="lightFront" min="0" max="85" step="1"><output id="lightFront-out"></output></div>
@@ -157,7 +188,7 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <div class="range"><label for="aoStr">Crevice shadow</label><input type="range" id="aoStr" min="0" max="1.5" step="0.05"><output id="aoStr-out"></output></div>
       <div class="range"><label for="exposure">Exposure</label><input type="range" id="exposure" min="0.6" max="1.5" step="0.01"><output id="exposure-out"></output></div>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Pixel rules</h2>
       <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
       <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
@@ -165,19 +196,20 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
       <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
       <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
     </section>
-    <section class="group">
+    <section class="group skel">
       <h2>Palette</h2>
       <label class="range" for="preset" style="grid-template-columns:96px 1fr"><span style="color:var(--muted)">Bone preset</span><select id="preset"></select></label>
       <div class="pal" id="pal-bone" aria-label="Bone colours"></div>
-      <h2>Disc colours</h2>
+      <h2>Disc and cartilage colours</h2>
       <div class="pal" id="pal-disc" aria-label="Disc colours"></div>
       <button class="btn" type="button" id="reset">Reset all settings</button>
     </section>
   </aside>
 
   <main id="stage"><div id="busy" hidden></div>
-    <div class="frame"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
-    <div id="caption"></div>
+    <div class="frame skel"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
+    <div id="caption" class="skel"></div>
+    <div class="empty" role="status"><b>Nothing here yet</b>The body and the clothing are built around the finished skeleton in later stages. This tab keeps their place; no artwork has been made for it.</div>
   </main>
   <div class="statusbar"><div id="status"></div></div>
 </div>
@@ -190,6 +222,12 @@ canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edge
 </script>
 <script id="rig-src">
 /*RIG*/
+</script>
+<script id="thorax-src">
+/*THORAX*/
+</script>
+<script id="thorax-rig-src">
+/*THORAXRIG*/
 </script>
 <script id="render-src">
 /*RENDER*/

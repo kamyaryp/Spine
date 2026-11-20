@@ -49,7 +49,7 @@ function cast(model, view, onProgress, only) {
   let hT = new Float32Array(cap), hN = new Float32Array(cap * 3), hA = new Float32Array(cap), hK = new Uint8Array(cap), hL = new Float32Array(cap * 3);
   const grow = () => { cap *= 2; const g = (A, m) => { const B = new A.constructor(cap * m); B.set(A); return B; }; hT = g(hT, 1); hN = g(hN, 3); hA = g(hA, 1); hK = g(hK, 1); hL = g(hL, 3); };
   jobs.forEach((J, q) => {
-    const { k, comp, M, Ov, i0, i1, j0, j1 } = J, sdf = comp.sdf, b = comp.box;
+    const { k, comp, M, Ov, i0, i1, j0, j1 } = J, sdf = comp.sdf, b = comp.box, chunks = comp.chunks || null;
     const ldx = -M[2][0], ldy = -M[2][1], ldz = -M[2][2];          // ray direction in local space
     for (let j = j0; j <= j1; j++) {
       const vy = (H / 2 - (j + 0.5) / ss) * mm;
@@ -67,7 +67,27 @@ function cast(model, view, onProgress, only) {
         const u = (j - V0) * UW + (i - U0);
         if (t0 >= zb[u]) continue;
         let t = t0, hit = false;
-        for (let s = 0; s < 200 && t < t1; s++) {
+        if (chunks) {
+          // long thin shapes (ribs, clavicles): march only the chunks this ray crosses, nearest hit wins
+          let best = zb[u];
+          for (let c = 0; c < chunks.length; c++) {
+            const cb = chunks[c].box; let a0 = t0, a1 = t1, ok2 = true;
+            for (let ax = 0; ax < 3 && ok2; ax++) {
+              const o = ax === 0 ? ox : ax === 1 ? oy : oz, d = ax === 0 ? ldx : ax === 1 ? ldy : ldz;
+              if (Math.abs(d) < 1e-9) { if (o < cb[ax] || o > cb[ax + 3]) ok2 = false; continue; }
+              let ta = (cb[ax] - o) / d, tb = (cb[ax + 3] - o) / d; if (ta > tb) { const tt = ta; ta = tb; tb = tt; }
+              if (ta > a0) a0 = ta; if (tb < a1) a1 = tb; if (a0 > a1) ok2 = false;
+            }
+            if (!ok2 || a0 >= best) continue;
+            const cs = chunks[c].sdf; let tt = a0;
+            for (let s = 0; s < 160 && tt < a1 && tt < best; s++) {
+              const d = cs(ox + ldx * tt, oy + ldy * tt, oz + ldz * tt);
+              if (d < 0.04) { best = tt; hit = true; break; }
+              tt += Math.max(d * 0.9, 0.02);
+            }
+          }
+          t = best;
+        } else for (let s = 0; s < 200 && t < t1; s++) {
           const d = sdf(ox + ldx * t, oy + ldy * t, oz + ldz * t);
           if (d < 0.04) { hit = true; break; }
           t += Math.max(d * 0.9, 0.02);
@@ -173,6 +193,11 @@ function stylise(g, model, st0) {
     }
     tone = out;
   }
+  // separate bones that touch without a depth jump (clavicle on the manubrium, rib head on its vertebra): a joint line,
+  // drawn on the farther of the two. Applies to skeletal elements added after the spine; spine-only pairs are unchanged.
+  const THX = { rib: 1, sternum: 1, clavicle: 1 };
+  const joint = (p, q) => { const a = model.els[objOf[p] - 1], b = model.els[objOf[q] - 1];
+    return a && b && a !== b && (THX[a.kind] || THX[b.kind]) && a.kind !== "cartilage" && b.kind !== "cartilage" && a.kind !== "disc" && b.kind !== "disc" && depth[q] <= depth[p]; };
   let lab = new Uint8Array(n);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const p = y * W + x; if (!cover[p]) continue;
@@ -181,6 +206,7 @@ function stylise(g, model, st0) {
     for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
       if (!at(cover, x + dx, y + dy, 0)) edge = true;
       else if (at(depth, x + dx, y + dy, 0) - depth[p] > st.gap) inner = true;
+      else if (objOf[p + dy * W + dx] !== objOf[p] && joint(p, p + dy * W + dx)) inner = true;
     }
     if (edge && st.outline) lab[p] = 1; else if (inner && st.lines) lab[p] = tone[p] >= 1 ? 2 : 1;
   }
@@ -211,7 +237,7 @@ function paint(st, model, palettes = PALETTES) {
   for (let p = 0; p < W * H; p++) {
     const v = lab[p]; if (!v) continue;
     const el = model.els[obj[p] - 1];
-    const pal = el && el.kind === "disc" ? pals.disc : pals.bone;
+    const pal = el && (el.kind === "disc" || el.kind === "cartilage") ? pals.disc : pals.bone;   // cartilage tissue: disc ramp
     const c = v === 1 ? pals.bone[0] : pal[v - 1];
     rgba[p * 4] = c[0]; rgba[p * 4 + 1] = c[1]; rgba[p * 4 + 2] = c[2]; rgba[p * 4 + 3] = 255;
   }

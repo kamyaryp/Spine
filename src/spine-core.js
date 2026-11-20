@@ -604,7 +604,11 @@ function shapeOf(el) {
   return lumbar(v);
 }
 // Compile an element into a fast SDF + part lookup + local bounds
+// Other skeletal modules (thorax, later limbs) register their own compilers for new element kinds.
+const EXT = {};
+function registerKind(kind, fn) { EXT[kind] = fn; }
 function compile(el) {
+  if (EXT[el.kind]) return EXT[el.kind](el);
   const sh = shapeOf(el);
   const body = sh.prims.filter((p) => p.g === 0), arch = sh.prims.filter((p) => p.g === 1), hole = sh.prims.filter((p) => p.g === 2);
   const k = sh.k;
@@ -628,7 +632,7 @@ function compile(el) {
   return { sdf, partAt, box: b };
 }
 
-const API = { SUBJECT, LEN, WID, HCAL, LEVELS, DISCS, POSTURE, ROM, P, PART_NAMES, build, compile, toWorld, toLocal, DEG };
+const API = { SUBJECT, LEN, WID, HCAL, LEVELS, DISCS, POSTURE, ROM, P, PART_NAMES, build, compile, registerKind, toWorld, toLocal, DEG };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.SpineCore = API;
 })(typeof self !== "undefined" ? self : this);

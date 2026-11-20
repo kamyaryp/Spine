@@ -1,4 +1,4 @@
-// node tools/export-rig.js [out.json] -> element frames, motion segments (pivots, limits, coupling) and control limits
+// node tools/export-rig.js [out.json] -> element frames, motion segments (pivots, limits, coupling), control limits, thorax
 const fs = require("fs");
 const S = require("../src/spine-core.js"), Rig = require("../src/spine-rig.js"), ROM = require("../src/spine-rom.js");
 const r = S.build(), D = S.DEG, rig = Rig.makeRig(r);
@@ -25,4 +25,21 @@ const out = {
   regions: Object.fromEntries(ROM.REGIONS.map((k) => [k, { activeDeg: ROM.REGION[k], controlLimitsDeg: Rig.regionLimits(k) }])),
   references: ROM.REFS, elements, segments, demos: Rig.demoPoses(),
 };
-const f = process.argv[2] || "spine-rig.json"; fs.writeFileSync(f, JSON.stringify(out, null, 1)); console.log("wrote", f, elements.length, "elements,", segments.length, "segments");
+// thorax: ribs, cartilages, sternum, clavicles (rest frames are world-aligned; origin = proximal joint)
+const TR = require("../src/thorax-rig.js"), sk = TR.buildSkeleton();
+const r1v = (v) => v.map(r1);
+out.thorax = {
+  about: "Rib cage and clavicles on the spinal rig. Rest frames are world-aligned (axes x, y, z); origin = proximal joint.",
+  hierarchy: { rib: "follows its vertebra rigidly + one rotation about its costovertebral axis (head -> tubercle), solved per pose",
+    sternum: "rigid; placed per pose where it disturbs the true-rib cartilages least", cartilage: "deformable, rebuilt per pose; keeps its rest arc length (bends, does not stretch)",
+    clavicle: "child of the sternum (sternoclavicular joint): elevation, protraction, posterior rotation; never attached to the spine" },
+  settings: ROM.SETTINGS.ribcage, sternoclavicular: { rangesDeg: ROM.SC, controlLimitsDeg: TR.clavLimits(), envelope: "|(e, p, r) / limits|_2 <= 1 per side" },
+  elements: sk.thorax.els.map((e) => ({ id: e.id, name: e.name, kind: e.kind, side: e.side, number: e.n, type: e.type, restOrigin: r1v(e.o),
+    parent: e.kind === "rib" ? e.vertebra : e.kind === "clavicle" ? "STERNUM" : e.kind === "cartilage" ? e.def.rib : null,
+    attachesTo: e.kind === "rib" ? [e.vertebra, e.upper].filter(Boolean) : e.kind === "cartilage" ? e.def.to : e.kind === "clavicle" ? "STERNUM" : undefined,
+    joint: e.joint ? Object.fromEntries(Object.entries(e.joint).map(([k, v]) => [k, Array.isArray(v) ? r1v(v) : v])) : undefined,
+    landmarks: e.landmarks ? Object.fromEntries(Object.entries(e.landmarks).map(([k, v]) => [k, r1v(v)])) : undefined,
+    restArcLength: e.restArc ? r1(e.restArc) : undefined })),
+  demos: TR.demoPoses().filter((d) => d.id === "shrug" || d.id === "shoulders-back"),
+};
+const f = process.argv[2] || "spine-rig.json"; fs.writeFileSync(f, JSON.stringify(out, null, 1)); console.log("wrote", f, elements.length, "spine elements,", segments.length, "segments,", out.thorax.elements.length, "thorax elements");

@@ -28,6 +28,9 @@ const REFS = {
   pearcy84b: "Pearcy & Tibrewal 1984, Spine 9(6): biplanar radiography, active axial rotation and lateral bending. About 2° rotation per level (L5-S1 less); bending about 5–6° per level, less at L4-5 and least at L5-S1.",
   fujimori07: "Fujimori et al. 2007, Eur Spine J: lumbar kinematics in trunk rotation, in vivo 3D MRI. 1.2–1.7° per segment at 45° trunk rotation; coupled bending opposite at L1/2–L4/5, same side at L5/S1.",
   whitePanjabi: "White & Panjabi 1990, Clinical Biomechanics of the Spine: representative (largely cadaveric) segmental ranges; used only as a passive upper reference.",
+  neumann: "Neumann, Kinesiology of the Musculoskeletal System (3rd ed.): sternoclavicular joint ranges ≈ 45° elevation, 10° depression, 15–20° protraction, 15–30° retraction, 20–35° posterior rotation.",
+  ludewig09: "Ludewig et al. 2009, J Bone Joint Surg Am 91(2): in vivo bone-pin kinematics; resting clavicle ≈ 20° retracted and ≈ 6° elevated; with arm elevation it retracts 15–30°, elevates ≈ 10° and rotates posteriorly ≈ 30°.",
+  wilke17: "Wilke et al. 2017, PLoS One (PMC5453693): in vitro thoracic segments with vs without the rib cage; the rib cage stiffens the segments, most in axial rotation (more than half the range). In vivo values above already include the intact rib cage.",
 };
 
 // share = this segment's part of the region's primary motion (deg, one direction, active in vivo)
@@ -79,9 +82,15 @@ const SETTINGS = {
   envelope: 2,               // combined-motion envelope per region: |(f, b, r) / limits|_p <= 1 with p = 2 (an ellipsoid)
   root: { tilt: 15, obliquity: 10, rotation: 10 },   // whole-sacrum (pelvis) control limits; sacrum fixed by default
   hipPivot: null,            // filled by the rig from the anatomy (hip axis)
+  // rib cage (thorax rig): ribs turn on their costovertebral axes, the sternum floats on the true-rib cartilages
+  ribcage: { costovertebralMax: 10, cartilageStretchWarn: 0.06 },
 };
+// Sternoclavicular joint: clavicle relative to the manubrium, degrees from the resting position (one direction).
+// Controls reach SETTINGS.conservative of these. Anterior rotation is not modelled (posterior rotation returns to 0).
+const SC = { elevation: 45, depression: 10, protraction: 17.5, retraction: 22.5, posteriorRotation: 27.5,
+  refs: ["neumann", "ludewig09"], approx: "textbook (largely passive) ranges; mid-points where a range is given" };
 
-const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS };
+const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS, SC };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.SpineROM = API;
 })(typeof self !== "undefined" ? self : this);
