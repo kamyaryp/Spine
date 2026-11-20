@@ -8,14 +8,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one environment for every build level. Level stepper on top, controls rail on the left,
-   the square pixel frame on the right, status bar below. Single dark world: sprites are judged on a neutral workspace. */
+/* Layout: header (title, three tabs, Export) over a workspace where the preview dominates. The preview column holds
+   the view toolbar, the fitted canvas and the playback bar; the panel on the right holds movement first, then
+   collapsed sections for occasional settings. On narrow screens the preview comes first and the panel follows. */
 :root {
-  --bg: #15181c; --panel: #1d2126; --raise: #272c33; --line: #333941;
+  --bg: #15181c; --panel: #1d2126; --raise: #272c33; --line: #333941; --line2: #424a54;
   --ink: #e7e2d6; --muted: #8f969e; --accent: #7cc4d8; --accent-ink: #0e1a1f;
   --f-display: "Pixelify Sans", "Courier New", monospace;
   --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --tap: 36px;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -24,194 +26,259 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); fon
 button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
 
-.app { height: 100%; display: grid; grid-template-columns: 296px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-h1 { font-family: var(--f-display); font-size: 22px; font-weight: 600; margin: 0; }
-header small { color: var(--muted); }
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+header { display: flex; align-items: center; gap: 18px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-height: 52px; flex-wrap: wrap; }
+h1 { font-family: var(--f-display); font-size: 19px; font-weight: 600; margin: 0; white-space: nowrap; }
+.tabs { display: flex; align-self: stretch; }
+.tabs button { border: 0; background: transparent; padding: 0 16px; cursor: pointer; color: var(--muted); font-weight: 500; position: relative; min-height: 52px; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); }
 .spacer { flex: 1; }
-.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+.btn { border: 1px solid var(--line2); background: var(--raise); border-radius: 6px; padding: 0 12px; min-height: var(--tap); cursor: pointer; white-space: nowrap; }
 .btn:hover { border-color: var(--muted); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.small { min-height: 30px; padding: 0 9px; font-size: 12px; }
 
-/* main tabs */
-.levels { grid-column: 1 / -1; display: flex; gap: 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
-.levels button { display: grid; gap: 1px; text-align: left; border: 0; border-right: 1px solid var(--line); background: transparent; padding: 9px 18px 8px; cursor: pointer; min-width: 150px; position: relative; }
-.levels button b { font-family: var(--f-display); font-weight: 500; font-size: 15px; }
-.levels button span { color: var(--muted); font-size: 12px; }
-.levels button[aria-selected="true"] { background: var(--panel); }
-.levels button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
-.levels button:disabled { cursor: default; opacity: 0.45; }
+/* export menu */
+.menu-wrap { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); width: 320px; background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 6px; z-index: 20; box-shadow: 0 10px 30px rgba(0,0,0,0.45); }
+.menu button { display: grid; gap: 2px; width: 100%; text-align: left; border: 0; background: transparent; border-radius: 6px; padding: 9px 10px; cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--raise); }
+.menu b { font-weight: 600; }
+.menu span { color: var(--muted); font-size: 12px; }
 
-.rail { grid-row: 3 / 5; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding-bottom: 18px; }
-.group { padding: 12px 16px; display: grid; gap: 9px; border-bottom: 1px solid var(--line); }
-.group h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
-.group h2 span { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.hint { margin: 0; color: var(--muted); font-size: 12px; }
-.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.seg button { flex: 1 1 auto; border: 0; background: transparent; padding: 5px 7px; cursor: pointer; white-space: nowrap; }
-.seg button + button { border-left: 1px solid var(--line); }
+/* workspace */
+.work { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+.stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.bar.bottom { border-bottom: 0; border-top: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 0 12px; min-height: 34px; cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line2); }
 .seg button:hover { background: var(--raise); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.chips button { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 4px; cursor: pointer; font-size: 12px; }
-.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.chips button:disabled { opacity: 0.35; cursor: default; }
-.bones { grid-template-columns: repeat(6, 1fr); }
-.bones button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
-.range { display: grid; grid-template-columns: 96px minmax(0, 1fr) 54px; align-items: center; gap: 8px; }
-.range label { color: var(--muted); }
-.range output { font-family: var(--f-mono); font-size: 12px; text-align: right; }
-input[type="range"] { width: 100%; accent-color: var(--accent); }
+.seg button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--muted); font-weight: 400; }
+.seg.small button { min-height: 30px; padding: 0 9px; font-size: 12px; }
+.orient { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.orient svg { flex: none; }
+.zoom { display: inline-flex; align-items: center; gap: 4px; }
+.zoom output { min-width: 62px; text-align: center; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+.viewport { position: relative; overflow: hidden; display: grid; place-items: center; min-height: 0; padding: 12px; }
+.viewport.scroll { overflow: auto; place-items: start; }
+.frame { position: relative; line-height: 0; }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+canvas.soft { image-rendering: auto; }
+#lbl-layer { position: absolute; inset: 0; pointer-events: none; line-height: 1.2; }
+.lbl { position: absolute; font-family: var(--f-mono); font-size: 11px; color: var(--muted); transform: translateY(-50%); white-space: nowrap; }
+.lbl.l { transform: translate(-100%, -50%); }
+#busy { position: absolute; top: 12px; right: 14px; background: var(--raise); border: 1px solid var(--line); padding: 3px 10px; border-radius: 999px; font-size: 12px; color: var(--accent); z-index: 2; }
+#hover { position: absolute; left: 14px; top: 12px; background: rgba(29,33,38,0.92); border: 1px solid var(--line); padding: 3px 9px; border-radius: 6px; font-size: 12px; z-index: 2; pointer-events: none; }
+.pose-name { color: var(--muted); }
+.pose-name b { color: var(--ink); font-weight: 500; }
+
+/* panel */
+.panel { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; min-height: 0; }
+.sec { border-bottom: 1px solid var(--line); }
+.sec > h2, .sec > summary { margin: 0; padding: 12px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.sec > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+.sec > summary::-webkit-details-marker { display: none; }
+.sec > summary::after { content: "+"; font-size: 16px; letter-spacing: 0; color: var(--muted); }
+.sec[open] > summary::after { content: "–"; }
+.sec > summary:hover { color: var(--ink); }
+.body { padding: 0 16px 14px; display: grid; gap: 10px; }
+.sub { font-size: 12px; font-weight: 600; color: var(--ink); margin: 4px 0 0; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+.presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.presets button { border: 1px solid var(--line2); background: var(--raise); border-radius: 6px; min-height: var(--tap); cursor: pointer; padding: 4px 8px; text-align: left; }
+.presets button:hover { border-color: var(--muted); }
+.presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+details.inner { border: 1px solid var(--line); border-radius: 8px; }
+details.inner > summary { cursor: pointer; padding: 9px 12px; font-weight: 500; min-height: 38px; display: flex; align-items: center; justify-content: space-between; list-style: none; }
+details.inner > summary::-webkit-details-marker { display: none; }
+details.inner > summary::after { content: "▸"; color: var(--muted); }
+details.inner[open] > summary::after { content: "▾"; }
+details.inner > div { padding: 2px 12px 12px; display: grid; gap: 10px; }
+details.adv > summary { font-size: 12px; color: var(--muted); }
+.slider { display: grid; gap: 2px; }
+.slider .top { display: flex; justify-content: space-between; align-items: baseline; }
+.slider .top output { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.slider .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 24px; margin: 0; }
 input[type="range"]:disabled { opacity: 0.4; }
-.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.check input { accent-color: var(--accent); margin: 0; }
-select { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.check { display: flex; align-items: center; gap: 9px; cursor: pointer; min-height: 30px; }
+.check input { accent-color: var(--accent); margin: 0; width: 16px; height: 16px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+select { background: var(--raise); border: 1px solid var(--line2); border-radius: 6px; padding: 0 8px; min-height: 32px; }
 .pal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .pal label { display: grid; gap: 2px; justify-items: center; font-size: 10px; color: var(--muted); cursor: pointer; }
-.pal input { width: 100%; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
+.pal input { width: 100%; height: 24px; padding: 0; border: 1px solid var(--line2); border-radius: 4px; background: none; cursor: pointer; }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; color: var(--muted); font-size: 12px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-.legend[hidden] { display: none; }
-[data-level="1"] .only2, [data-level="2"] .only1 { display: none; }
-[data-tab="body"] .skel, [data-tab="clothing"] .skel { display: none; }
-[data-tab="skeleton"] .empty { display: none; }
-.empty { max-width: 460px; margin: 60px auto; padding: 22px 24px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
-.empty b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
-.sub-h { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.ribs { grid-template-columns: repeat(6, 1fr); }
-.ribs button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
-#ribcage-state { font-size: 12px; color: var(--muted); margin: 0; }
-.stack { display: grid; gap: 6px; }
-
-.row { display: flex; gap: 6px; flex-wrap: wrap; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.region-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-top: 4px; }
-.region-h span { font-weight: 400; color: var(--muted); font-family: var(--f-mono); }
-.range.pose { grid-template-columns: 74px minmax(0, 1fr) 54px; }
-details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-#seg-table { max-height: 260px; overflow: auto; margin-top: 6px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-family: var(--f-mono); text-align: right; }
+#seg-table { max-height: 260px; overflow: auto; }
 #seg-table table { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 #seg-table td, #seg-table th { padding: 1px 4px; text-align: right; border-bottom: 1px solid var(--line); }
 #seg-table th { color: var(--muted); font-weight: 500; }
 #seg-table td:first-child, #seg-table th:first-child { text-align: left; }
-#seg-table .bar { color: var(--accent); }
-#stage { position: relative; overflow: auto; padding: 20px; min-height: 0; }
-.frame { position: relative; display: inline-block; border: 1px solid var(--line); }
-canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
-#lbl-layer { position: absolute; inset: 0; pointer-events: none; }
-.lbl { position: absolute; font-family: var(--f-mono); font-size: 11px; color: var(--muted); transform: translateY(-50%); white-space: nowrap; }
-.lbl.l { transform: translate(-100%, -50%); }
-#caption { color: var(--muted); font-size: 12px; margin-top: 8px; }
-#busy { position: absolute; top: 12px; right: 16px; background: var(--raise); border: 1px solid var(--line); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--accent); }
-#toast { position: fixed; bottom: 46px; right: 18px; background: var(--raise); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 6px; }
-.statusbar { border-top: 1px solid var(--line); background: var(--panel); padding: 7px 16px; min-height: 34px; }
-#status { font-family: var(--f-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-@media (max-width: 800px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(70vh, 1fr) auto; height: auto; min-height: 100%; }
-  .rail { grid-row: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+.notes { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12px; display: grid; gap: 4px; }
+
+.empty { margin: auto; max-width: 420px; padding: 22px 24px; border: 1px dashed var(--line2); border-radius: 8px; color: var(--muted); }
+.empty b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
+.emptywrap { display: grid; place-items: center; padding: 24px; }
+#toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--raise); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 6px; z-index: 30; }
+
+@media (max-width: 900px) {
+  .app { height: auto; min-height: 100%; }
+  header { padding: 0 10px; gap: 8px; }
+  h1 { font-size: 16px; }
+  .tabs button { padding: 0 11px; }
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .stage { grid-template-rows: auto auto auto; position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .viewport { height: min(52vh, 92vw + 24px); }
+  .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .bar { padding: 8px 10px; gap: 8px; }
+  :root { --tap: 40px; }
+  .seg button { min-height: 38px; }
 }
 </style>
 </head>
 <body>
-<div class="app" id="app" data-tab="skeleton" data-level="2">
+<div class="app" id="app" data-tab="skeleton">
   <header>
-    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm, 78 kg · one 3D model, rendered to pixel art in the browser</small>
+    <h1>Pixel Character Lab</h1>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Character layer"></nav>
     <div class="spacer"></div>
-    <button class="btn skel" type="button" id="save">Save PNG</button>
-    <button class="btn skel" type="button" id="copy">Copy style JSON</button>
+    <div class="menu-wrap" id="export-wrap">
+      <button class="btn primary" type="button" id="export" aria-haspopup="menu" aria-expanded="false">Export</button>
+      <div class="menu" id="export-menu" role="menu" hidden>
+        <button type="button" role="menuitem" id="exp-art"><b>Artwork PNG</b><span>Clean sprite: transparent background, palette colours, 1 px per pixel. Diagnostic colours, labels and guides are left out.</span></button>
+        <button type="button" role="menuitem" id="exp-view"><b>Preview PNG (as shown)</b><span id="exp-view-note">Exactly what the preview shows: background, colours, labels and guides, at 2× so labels stay readable.</span></button>
+      </div>
+    </div>
   </header>
-  <nav class="levels" id="tabs" role="tablist" aria-label="Character"></nav>
 
-  <aside class="rail" aria-label="Controls">
-    <section class="group skel">
-      <h2>Skeleton</h2>
-      <div class="seg" id="mode" role="group" aria-label="Show"></div>
-      <div class="only2 stack">
-        <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine (vertebrae, discs, sacrum, coccyx)</label>
-        <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage (12 rib pairs, costal cartilages, sternum)</label>
-        <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+  <div class="work" id="work">
+    <section class="stage" aria-label="Preview">
+      <div class="bar" role="toolbar" aria-label="View">
+        <div class="seg" id="angle" role="group" aria-label="Camera angle"></div>
+        <div class="seg small" id="side" role="group" aria-label="Side of the body facing the camera"></div>
+        <div class="orient" id="orient"></div>
+        <div class="spacer"></div>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button class="btn small" type="button" id="zoom-out" aria-label="Zoom out">−</button>
+          <output id="zoom-out-val" aria-live="polite"></output>
+          <button class="btn small" type="button" id="zoom-in" aria-label="Zoom in">+</button>
+          <button class="btn small" type="button" id="zoom-fit" aria-pressed="true">Fit</button>
+        </div>
+      </div>
+      <div class="viewport" id="viewport">
+        <div id="busy" hidden></div>
+        <div id="hover" hidden></div>
+        <div class="frame" id="frame"><canvas id="cv" width="96" height="96" role="img" aria-label="Pixel-art skeleton preview"></canvas><div id="lbl-layer"></div></div>
+      </div>
+      <div class="bar bottom" role="toolbar" aria-label="Playback">
+        <button class="btn primary" type="button" id="play" aria-pressed="false">▶ Play</button>
+        <button class="btn" type="button" id="reset-pose">Reset pose</button>
+        <span class="pose-name" id="pose-name"></span>
       </div>
     </section>
-    <section class="group only2 skel" id="pose-group">
-      <h2>Pose <span id="pose-state">neutral</span></h2>
-      <div class="chips" id="demos" role="group" aria-label="Demonstration poses"></div>
-      <div class="row"><button class="btn primary" type="button" id="play">Play</button><button class="btn" type="button" id="to-neutral">Reset to neutral</button></div>
-      <div id="pose-sliders"></div>
-      <label class="check" for="sacrum-fixed"><input type="checkbox" id="sacrum-fixed"> Sacrum fixed (isolated spine)</label>
-      <div id="root-sliders"></div>
-      <details id="seg-details"><summary>Segment angles</summary><div id="seg-table"></div></details>
-      <p class="hint">Regional controls are spread over the motion segments by their measured share. Limits: 85 % of mean active ranges; combined motions share one envelope.</p>
-      <p id="ribcage-state"></p>
-    </section>
-    <section class="group only2 skel">
-      <h2>Clavicles <span>sternoclavicular joint</span></h2>
-      <label class="check" for="clav-link"><input type="checkbox" id="clav-link"> Move both together</label>
-      <div id="clav-sliders"></div>
-      <p class="hint">Each clavicle hangs from the manubrium, never from the spine. Limits: 85 % of textbook ranges; one envelope per side.</p>
-    </section>
-    <section class="group only1 skel">
-      <h2>Bone <span id="bone-name"></span></h2>
-      <div class="sub-h">Spine</div>
-      <div class="chips bones" id="bones" role="group" aria-label="Vertebra"></div>
-      <div class="sub-h">Ribs</div>
-      <div class="seg" id="rib-side" role="group" aria-label="Rib side"></div>
-      <div class="chips ribs" id="ribs" role="group" aria-label="Rib"></div>
-      <div class="sub-h">Sternum and clavicles</div>
-      <div class="chips" id="girdle" role="group" aria-label="Sternum and clavicles"></div>
-      <p class="hint">Any single bone in its own frame. L3 is the approved style study.</p>
-    </section>
-    <section class="group skel">
-      <h2>Camera angle</h2>
-      <div class="chips" id="views" role="group" aria-label="View"></div>
-      <p class="hint">Fixed eye-level angles about one pivot: a point keeps the same screen height in every view.</p>
-    </section>
-    <section class="group skel">
-      <h2>Pixel scale <span>mm per pixel</span></h2>
-      <div class="seg" id="mm" role="group" aria-label="Millimetres per pixel"></div>
-      <h2>Zoom</h2>
-      <div class="seg" id="zoom" role="group" aria-label="Zoom"></div>
-      <h2>Background</h2>
-      <div class="seg" id="bg" role="group" aria-label="Background"></div>
-    </section>
-    <section class="group skel">
-      <h2>Overlays</h2>
-      <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
-      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Labels (vertebrae, rib numbers)</label>
-      <div class="seg" id="colorby" role="group" aria-label="Colour by"></div>
-      <div class="legend" id="legend" hidden></div>
-    </section>
-    <section class="group skel">
-      <h2>Light</h2>
-      <div class="range"><label for="lightDir">Direction</label><input type="range" id="lightDir" min="0" max="355" step="1"><output id="lightDir-out"></output></div>
-      <div class="range"><label for="lightFront">Toward viewer</label><input type="range" id="lightFront" min="0" max="85" step="1"><output id="lightFront-out"></output></div>
-      <div class="range"><label for="ambient">Ambient</label><input type="range" id="ambient" min="0" max="0.5" step="0.01"><output id="ambient-out"></output></div>
-      <div class="range"><label for="aoStr">Crevice shadow</label><input type="range" id="aoStr" min="0" max="1.5" step="0.05"><output id="aoStr-out"></output></div>
-      <div class="range"><label for="exposure">Exposure</label><input type="range" id="exposure" min="0.6" max="1.5" step="0.01"><output id="exposure-out"></output></div>
-    </section>
-    <section class="group skel">
-      <h2>Pixel rules</h2>
-      <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
-      <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
-      <div class="range"><label for="gap">Depth jump</label><input type="range" id="gap" min="1" max="10" step="0.5"><output id="gap-out"></output></div>
-      <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
-      <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
-    </section>
-    <section class="group skel">
-      <h2>Palette</h2>
-      <label class="range" for="preset" style="grid-template-columns:96px 1fr"><span style="color:var(--muted)">Bone preset</span><select id="preset"></select></label>
-      <div class="pal" id="pal-bone" aria-label="Bone colours"></div>
-      <h2>Disc and cartilage colours</h2>
-      <div class="pal" id="pal-disc" aria-label="Disc colours"></div>
-      <button class="btn" type="button" id="reset">Reset all settings</button>
-    </section>
-  </aside>
 
-  <main id="stage"><div id="busy" hidden></div>
-    <div class="frame skel"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
-    <div id="caption" class="skel"></div>
-    <div class="empty" role="status"><b>Nothing here yet</b>The body and the clothing are built around the finished skeleton in later stages. This tab keeps their place; no artwork has been made for it.</div>
-  </main>
-  <div class="statusbar"><div id="status"></div></div>
+    <aside class="panel" id="panel" aria-label="Settings">
+      <section class="sec">
+        <h2>Movement</h2>
+        <div class="body">
+          <div class="presets" id="demos" role="group" aria-label="Movement presets"></div>
+          <details class="inner" id="adjust">
+            <summary>Adjust pose</summary>
+            <div>
+              <div class="seg small" id="region" role="group" aria-label="Body region"></div>
+              <div id="region-controls"></div>
+              <details class="inner adv" id="pelvis">
+                <summary>Advanced: pelvis (sacrum)</summary>
+                <div>
+                  <label class="check" for="sacrum-fixed"><input type="checkbox" id="sacrum-fixed"> Keep the sacrum fixed</label>
+                  <div id="root-controls"></div>
+                </div>
+              </details>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <details class="sec" id="sec-vis">
+        <summary>Visibility</summary>
+        <div class="body">
+          <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine</label>
+          <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage</label>
+          <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+          <label class="check" for="labels"><input type="checkbox" id="labels"> Anatomical labels</label>
+          <label class="check" for="guides"><input type="checkbox" id="guides"> Centre guides</label>
+          <div class="sub">Diagnostic colouring</div>
+          <div class="seg small" id="colorby" role="group" aria-label="Diagnostic colouring"></div>
+          <div class="legend" id="legend" hidden></div>
+        </div>
+      </details>
+
+      <details class="sec" id="sec-look">
+        <summary>Appearance</summary>
+        <div class="body">
+          <div class="sub">Palette</div>
+          <select id="preset" aria-label="Palette preset"></select>
+          <details class="inner adv"><summary>Custom colours</summary><div>
+            <div class="hint">Bone</div><div class="pal" id="pal-bone"></div>
+            <div class="hint">Discs and cartilage</div><div class="pal" id="pal-disc"></div>
+          </div></details>
+          <div class="sub">Background</div>
+          <div class="seg small" id="bg" role="group" aria-label="Background"></div>
+          <div class="sub">Pixel detail</div>
+          <div class="seg small" id="mm" role="group" aria-label="Millimetres per pixel"></div>
+          <div class="hint">Size of one pixel on the character. Display zoom does not change it.</div>
+          <details class="inner adv"><summary>Lighting</summary><div id="light-controls"></div></details>
+          <details class="inner adv"><summary>Pixel rules</summary><div>
+            <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
+            <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
+            <div id="gap-control"></div>
+            <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
+            <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
+          </div></details>
+          <div class="row">
+            <button class="btn small" type="button" id="copy">Copy style JSON</button>
+            <button class="btn small" type="button" id="reset-look">Reset appearance</button>
+          </div>
+          <p class="hint">Reset appearance restores palette, background, pixel detail, lighting and pixel rules. Pose, view and visibility stay as they are.</p>
+        </div>
+      </details>
+
+      <details class="sec" id="sec-tech">
+        <summary>Technical details</summary>
+        <div class="body">
+          <div class="sub">Range-of-motion envelopes</div>
+          <dl class="kv" id="envelopes"></dl>
+          <div class="sub">Rib cage response</div>
+          <dl class="kv" id="ribcage"></dl>
+          <details class="inner adv"><summary>Segment angles</summary><div><div id="seg-table"></div></div></details>
+          <div class="sub">How movement works</div>
+          <ul class="notes">
+            <li>Each region's angle is spread over its motion segments by measured in vivo shares; no single joint takes a region's range.</li>
+            <li>Controls reach 85 % of mean active ranges. Combined motions share one envelope per region, so all axes cannot peak together; every segment is capped.</li>
+            <li>Ribs move with their vertebrae and may turn up to 10° at their costovertebral joints; the sternum settles where the cartilages are disturbed least; cartilages bend and keep their length.</li>
+            <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine; limits are 85 % of textbook ranges with one envelope per side.</li>
+            <li>The sacrum is fixed by default; the pelvis controls rotate it about the hip axis.</li>
+          </ul>
+          <div class="sub">Model</div>
+          <dl class="kv" id="model-info"></dl>
+        </div>
+      </details>
+    </aside>
+  </div>
+
+  <div class="emptywrap" id="empty" hidden><div class="empty" role="status"><b id="empty-title">Nothing here yet</b><span id="empty-text"></span></div></div>
 </div>
 <div id="toast" role="status" hidden></div>
 <script id="core-src">
@@ -2132,88 +2199,81 @@ else root.SpineRender = API;
 
 </script>
 <script>
-// Pixel Character Lab: one environment, three tabs (Skeleton, Body, Clothing).
-// Skeleton holds the whole skeleton as it is completed (spine, rib cage, clavicles) and the single-bone style view.
+// Pixel Character Lab: three tabs (Skeleton, Body, Clothing). Skeleton always shows the assembled skeleton.
+// Workflow first: view → angle → movement → play → export. Occasional and technical settings sit in collapsed sections.
 // Every view is the same anatomy model (spine-core + thorax-core) through the same pixel-art renderer (spine-render).
 (() => {
 const $ = (id) => document.getElementById(id);
-const C = window.SpineCore, R = window.SpineRender, Th = window.ThoraxCore, TR = window.ThoraxRig, SR = window.SpineRig, ROM = window.SpineROM;
+const C = window.SpineCore, R = window.SpineRender, TR = window.ThoraxRig, SR = window.SpineRig, ROM = window.SpineROM;
 
+// ---------- constants ----------
 const TABS = [
-  { id: "skeleton", name: "Skeleton", sub: "Spine, rib cage, clavicles" },
-  { id: "body", name: "Body", sub: "Not started" },
-  { id: "clothing", name: "Clothing", sub: "Not started" },
+  { id: "skeleton", name: "Skeleton" },
+  { id: "body", name: "Body", empty: "The body is built around the finished skeleton in a later stage. No body artwork exists yet." },
+  { id: "clothing", name: "Clothing", empty: "Close-fitting clothing follows the body in a later stage. No clothing artwork exists yet." },
 ];
-const TOP = { id: "top", name: "Top", yaw: 0, pitch: 90 };
-const VIEWS = [...R.VIEWS.map((v) => ({ ...v, pitch: 0 })), TOP];
-const SHORT = { front: "Front", "front-right": "Front ¾ R", right: "Right", "back-right": "Back ¾ R", back: "Back", "back-left": "Back ¾ L", left: "Left", "front-left": "Front ¾ L", top: "Top" };
+// camera: angle kind + which side of the body faces the camera (subject's right / left)
+const ANGLES = [["front", "Front"], ["q", "¾"], ["side", "Side"], ["back", "Back"], ["qb", "¾ back"]];
+const viewIdOf = (a, s) => (a === "front" || a === "back" ? a : a === "side" ? (s === "R" ? "right" : "left") : `${a === "q" ? "front" : "back"}-${s === "R" ? "right" : "left"}`);
+const angleOf = (id) => (id === "front" || id === "back" ? [id, null] : id === "right" || id === "left" ? ["side", id[0].toUpperCase()] : [id.startsWith("front") ? "q" : "qb", id.endsWith("right") ? "R" : "L"]);
+const ANGLE_NAMES = { front: "Front", q: "Front ¾", side: "Side", back: "Back", qb: "Back ¾" };
 const PRESETS = {
-  "Study bone": ["#2b211b", "#5c4a3b", "#8e7860", "#bca98a", "#e0d4b8", "#faf4e3"],
+  "Study bone (approved)": ["#2b211b", "#5c4a3b", "#8e7860", "#bca98a", "#e0d4b8", "#faf4e3"],
   "pixelfx bone": ["#1a1814", "#3a352c", "#8a806c", "#b8ad96", "#e4dcc8", "#fffaf0"],
   "Cool ivory": ["#1e2128", "#4a4f5c", "#7f8593", "#b3b6bd", "#dcdcd8", "#f7f6f0"],
   "X-ray": ["#0b1a24", "#1f4257", "#3f7590", "#6fa9c2", "#a9d6e6", "#e6f7fb"],
 };
 const SLOT = ["outline", "line", "shade", "mid", "light", "hi"];
+const BGS = { neutral: ["Neutral", "#2a2f35"], checker: ["Transparent", null], dark: ["Dark", "#121417"], light: ["Light", "#eef0f2"], skin: ["Skin", "#c99a7c"] };
 const PART_COLORS = { 1: "#d9a441", 2: "#5aa6c9", 3: "#8b7fd1", 4: "#5fb38a", 5: "#d9708a", 6: "#c98b5a", 7: "#7c9cd9", 8: "#e0605a", 9: "#59b7c9",
   10: "#a87fc9", 11: "#c9c25a", 12: "#a7b2b0", 13: "#b59a72", 14: "#e3b98f", 15: "#c7a5c9", 16: "#e89a4f", 17: "#6fcf9a", 18: "#d9a441", 19: "#3a3330",
   20: "#e0605a", 21: "#e89a4f", 22: "#c9c25a", 23: "#d9b98a", 24: "#a7b2b0", 25: "#59b7c9", 26: "#5aa6c9", 27: "#8b7fd1", 28: "#6fcf9a", 29: "#5fb38a", 30: "#c7a5c9" };
 const REGION_COLORS = { cervical: "#d9a441", thoracic: "#5aa6c9", lumbar: "#8b7fd1", sacral: "#5fb38a", coccygeal: "#d9708a", disc: "#a7b2b0",
   ribcage: "#e3b98f", cartilage: "#cfd8d4", sternum: "#e0605a", clavicle: "#6fcf9a" };
-const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Disc", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicle" };
-const DEFAULTS = {
-  tab: "skeleton", mode: "full", bone: "L3", ribSide: "L", view: "front", mm: 1, zoom: "fit", bg: "checker", guides: true, labels: true, colorby: "none",
-  layers: { spine: true, ribcage: true, clavicles: true },
-  lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, outline: true, lines: true, gap: 3, rim: true, clusters: true,
-  bone6: PRESETS["Study bone"].slice(), disc6: R.PALETTES.disc.slice(), preset: "Study bone",
-};
+const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Discs", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicles" };
+const DEMO_NAMES = { neutral: "Neutral", flexion: "Bend forward", extension: "Bend back", "bend-left": "Side bend left", "bend-right": "Side bend right",
+  "rotate-left": "Twist left", "rotate-right": "Twist right", combined: "Combined", shrug: "Shrug", "shoulders-back": "Shoulders back" };
+const REGIONS = [["cervical", "Neck"], ["thoracic", "Upper back"], ["lumbar", "Lower back"], ["clavicle", "Clavicles"]];
+const LOOK = { lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, outline: true, lines: true, gap: 3, rim: true, clusters: true, mm: 1, bg: "neutral",
+  bone6: PRESETS["Study bone (approved)"], disc6: R.PALETTES.disc, preset: "Study bone (approved)" };
+const DEFAULTS = { tab: "skeleton", view: "front", side: "R", zoom: "fit", labels: false, guides: false, colorby: "none",
+  layers: { spine: true, ribcage: true, clavicles: true }, region: "thoracic", sacrumFixed: true, clavLink: true };
+const KEY = "pixel-character-lab-v2";
+const clone = (o) => JSON.parse(JSON.stringify(o));
 let S = load();
 function load() {
-  try {
-    const o = JSON.parse(localStorage.getItem("pixel-character-lab") || "null");
-    if (o) {
-      const s = { ...DEFAULTS, ...o, bone6: (o.bone6 || DEFAULTS.bone6).slice(), disc6: (o.disc6 || DEFAULTS.disc6).slice(), layers: { ...DEFAULTS.layers, ...(o.layers || {}) } };
-      if (!o.tab) { s.tab = "skeleton"; s.mode = o.level === 1 ? "bone" : "full"; }     // settings saved by the level-based lab
-      return s;
-    }
-  } catch (e) { /* no storage */ }
-  return { ...DEFAULTS, bone6: DEFAULTS.bone6.slice(), disc6: DEFAULTS.disc6.slice(), layers: { ...DEFAULTS.layers } };
+  const base = { ...clone(DEFAULTS), ...clone(LOOK) };
+  try { const o = JSON.parse(localStorage.getItem(KEY) || "null"); if (o) return { ...base, ...o, layers: { ...base.layers, ...(o.layers || {}) } }; } catch (e) { /* no storage */ }
+  return base;
 }
-const save = () => { try { localStorage.setItem("pixel-character-lab", JSON.stringify(S)); } catch (e) { /* ignore */ } };
-const level = () => (S.mode === "bone" ? 1 : 2);
+const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch (e) { /* ignore */ } };
 
-// ---------- models ----------
+// ---------- model and rig ----------
 const sk = TR.buildSkeleton();
 const full = { els: sk.els, comps: sk.els.map(C.compile) };
-const SPINE_BONES = ["C1", "C2", "C3", "C4", "C5", "C6", "C7", "T1", "T2", "T3", "T4", "T5", "T6", "T7", "T8", "T9", "T10", "T11", "T12", "L1", "L2", "L3", "L4", "L5", "S", "Co"];
-const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" ? "clavicles" : "spine");
-function boneModel(id) {
-  const k = full.els.findIndex((e) => e.id === id), el = { ...full.els[k], o: [0, 0, 0], psi: 0, R: undefined }, comp = full.comps[k], b = comp.box;
-  const span = Math.max(b[3] - b[0], b[4] - b[1], b[5] - b[2]);
-  // pivot at the bone's box centre (vertebrae are centred on x = 0 anyway; ribs and clavicles are not)
-  return { els: [el], comps: [comp], frameMM: Math.max(96, Math.ceil((span * 1.12) / 8) * 8), pivot: [el.kind === "vertebra" || el.kind === "sacrum" || el.kind === "coccyx" || el.kind === "disc" ? 0 : (b[0] + b[3]) / 2, (b[1] + b[4]) / 2, (b[2] + b[5]) / 2] };
-}
 const rig = TR.makeRig(sk);
+const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" ? "clavicles" : "spine");
 const normPose = (p) => { const z = TR.ZERO(); p = p || {}; for (const k of [...ROM.REGIONS, "root"]) z[k] = { ...z[k], ...(p[k] || {}) }; for (const s of ["L", "R"]) z.clavicle[s] = { ...z.clavicle[s], ...((p.clavicle || {})[s] || {}) }; return z; };
 const poseKey = (p) => JSON.stringify(normPose(p));
+S.pose = normPose(S.pose);
+if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 };
 const posedCache = new Map();
 function posed(pose) {
   const k = poseKey(pose); if (posedCache.has(k)) return posedCache.get(k);
   const m = TR.posedModel(rig, full.comps, normPose(pose)); posedCache.set(k, m); if (posedCache.size > 24) posedCache.delete(posedCache.keys().next().value); return m;
 }
-const modelFor = (lv, bone, pose) => (lv === 1 ? boneModel(bone) : { ...posed(pose), frameMM: R.FRAME.W * R.FRAME.mm, pivot: R.FRAME.pivot });
-S.pose = normPose(S.pose);
-if (!full.els.some((e) => e.id === S.bone)) S.bone = "L3";
-let model = modelFor(level(), S.bone, S.pose);
-function viewSpec(m, v, mm) { const W = Math.round(m.frameMM / mm); return { yaw: v.yaw, pitch: v.pitch || 0, mm, W, H: W, pivot: m.pivot, ss: level() === 1 ? 4 : 3 }; }
+const modelFor = (pose) => ({ ...posed(pose), frameMM: R.FRAME.W * R.FRAME.mm, pivot: R.FRAME.pivot });
+let model = modelFor(S.pose);
+const VIEW = (id) => R.VIEWS.find((v) => v.id === id);
+const viewSpec = (m, id, mm) => { const W = Math.round(m.frameMM / mm); return { yaw: VIEW(id).yaw, pitch: 0, mm, W, H: W, pivot: m.pivot, ss: 3 }; };
 const visible = () => full.els.map((e, k) => (S.layers[layerOf(e)] ? k : -1)).filter((k) => k >= 0);
 
 // ---------- workers ----------
 const SRC = ["core-src", "rom-src", "rig-src", "thorax-src", "thorax-rig-src", "render-src"].map((id) => $(id).textContent).join("\n") + `
-  let SK = null, FULL = null, RIGW = null; const BONE = {};
+  let SK = null, FULL = null, RIGW = null;
   function full() { if (!FULL) { SK = ThoraxRig.buildSkeleton(); FULL = { els: SK.els, comps: SK.els.map(SpineCore.compile) }; RIGW = ThoraxRig.makeRig(SK); } return FULL; }
-  function bone(id) { if (!BONE[id]) { const F = full(), k = F.els.findIndex((e) => e.id === id); BONE[id] = { els: [{ ...F.els[k], o: [0, 0, 0], psi: 0, R: undefined }], comps: [F.comps[k]] }; } return BONE[id]; }
   self.onmessage = (ev) => {
-    const q = ev.data, M = q.level === 1 ? bone(q.bone) : (full(), ThoraxRig.posedModel(RIGW, FULL.comps, q.pose));
+    const q = ev.data; full(); const M = ThoraxRig.posedModel(RIGW, FULL.comps, q.pose);
     const g = SpineRender.cast(M, q.view, (p) => self.postMessage({ id: q.id, progress: p }), q.only);
     self.postMessage({ id: q.id, g }, [g.idx.buffer, g.depth.buffer, g.nx.buffer, g.ny.buffer, g.nz.buffer, g.ao.buffer, g.part.buffer, g.obj.buffer]);
   };`;
@@ -2226,196 +2286,316 @@ function sharesFor(ks) {
   ks.map((k) => [cost[k], k]).sort((a, b) => b[0] - a[0]).forEach(([c, k]) => { const s = sh.reduce((a, b) => (a.c <= b.c ? a : b)); s.k.push(k); s.c += c; });
   return sh;
 }
-
 const cache = new Map(); let jobId = 0;
-function geometry(lv, bone, viewId, mm, onProgress, pose) {
+function geometry(viewId, mm, onProgress, pose) {
   pose = normPose(pose || S.pose);
-  const vis = visible(), key = `${lv}|${lv === 1 ? bone : poseKey(pose) + "|" + vis.length + ":" + JSON.stringify(S.layers)}|${viewId}|${mm}`;
+  const vis = visible(), key = `${poseKey(pose)}|${vis.join(",")}|${viewId}|${mm}`;
   if (cache.has(key)) return Promise.resolve(cache.get(key));
-  const m = modelFor(lv, bone, pose), v = VIEWS.find((x) => x.id === viewId), view = viewSpec(m, v, mm);
-  if (!workers.length) return new Promise((res) => setTimeout(() => { const g = R.cast(m, view, null, lv === 1 ? null : vis); cache.set(key, g); res(g); }, 10));
+  const m = modelFor(pose), view = viewSpec(m, viewId, mm);
+  if (!workers.length) return new Promise((res) => setTimeout(() => { const g = R.cast(m, view, null, vis); cache.set(key, g); res(g); }, 10));
   const id = ++jobId;
-  const jobs = lv === 1 ? [{ w: workers[0], only: null }] : sharesFor(vis).map((s, i) => ({ w: workers[i], only: s.k })).filter((j) => j.only.length);
+  const jobs = sharesFor(vis).map((s, i) => ({ w: workers[i], only: s.k })).filter((j) => j.only.length);
+  if (!jobs.length) { const g = R.cast(m, view, null, []); cache.set(key, g); return Promise.resolve(g); }
   const prog = jobs.map(() => 0);
   return Promise.all(jobs.map((j, i) => new Promise((res) => {
     const h = (ev) => { if (ev.data.id !== id) return; if (ev.data.g) { j.w.removeEventListener("message", h); res(ev.data.g); } else { prog[i] = ev.data.progress; onProgress && onProgress(prog.reduce((a, b) => a + b, 0) / prog.length); } };
-    j.w.addEventListener("message", h); j.w.postMessage({ id, level: lv, bone, view, only: j.only, pose });
-  }))).then((parts) => {
-    const g = parts.length ? R.merge(parts) : R.cast(m, view, null, []);
-    cache.set(key, g); if (cache.size > 40) cache.delete(cache.keys().next().value);
-    return g;
-  });
+    j.w.addEventListener("message", h); j.w.postMessage({ id, view, only: j.only, pose });
+  }))).then((parts) => { const g = R.merge(parts); cache.set(key, g); if (cache.size > 40) cache.delete(cache.keys().next().value); return g; });
 }
 
-// ---------- styling + drawing ----------
+// ---------- pixels ----------
 let geo = null, st = null, hoverObj = 0;
 const styleOf = () => ({ lightDir: S.lightDir, lightFront: S.lightFront, ambient: S.ambient, aoStr: S.aoStr, exposure: S.exposure, gap: S.gap, outline: S.outline, lines: S.lines, rim: S.rim, clusters: S.clusters });
 const hex = (h) => [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16));
-const regionOf = (el) => (el.kind === "disc" ? "disc" : el.region);
-function pixels(forExport) {
-  const rgba = R.paint(st, model, { bone: S.bone6, disc: S.disc6 });
-  if (forExport) return rgba;
+// clean = palette colours only (artwork); otherwise diagnostic colouring and hover highlight as shown
+function pixels(s, m, clean) {
+  const rgba = R.paint(s, m, { bone: S.bone6, disc: S.disc6 });
+  if (clean) return rgba;
   if (S.colorby !== "none") {
     const mul = [0, 0, 0.45, 0.62, 0.8, 0.95, 1.08];
-    for (let p = 0; p < st.W * st.H; p++) {
-      const v = st.lab[p]; if (!v || v === 1) continue;
-      const el = model.els[st.obj[p] - 1];
-      const c = hex(S.colorby === "part" ? PART_COLORS[st.part[p]] || "#888888" : REGION_COLORS[regionOf(el)] || "#888888");
+    for (let p = 0; p < s.W * s.H; p++) {
+      const v = s.lab[p]; if (!v || v === 1) continue;
+      const el = m.els[s.obj[p] - 1];
+      const c = hex(S.colorby === "part" ? PART_COLORS[s.part[p]] || "#888888" : REGION_COLORS[el.kind === "disc" ? "disc" : el.region] || "#888888");
       rgba[p * 4] = c[0] * mul[v]; rgba[p * 4 + 1] = c[1] * mul[v]; rgba[p * 4 + 2] = c[2] * mul[v];
     }
   }
-  if (hoverObj && model.els.length > 1) for (let p = 0; p < st.W * st.H; p++) if (st.lab[p] && st.obj[p] !== hoverObj) { rgba[p * 4] *= 0.5; rgba[p * 4 + 1] *= 0.5; rgba[p * 4 + 2] *= 0.55; }
   return rgba;
 }
-function zoomFor() {
-  if (S.zoom !== "fit") return +S.zoom;
-  const el = $("stage"); return Math.max(1, Math.floor(Math.min((el.clientWidth - 44) / st.W, (el.clientHeight - 70) / st.H)));
+
+// ---------- zoom ----------
+const ZOOMS = [0.25, 0.33, 0.5, 0.67, 0.75, 1, 2, 3, 4, 6, 8];
+function fitZoom() {
+  const vp = $("viewport"), cs = getComputedStyle(vp);
+  const aw = vp.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight), ah = vp.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const W = st ? st.W : Math.round(R.FRAME.W / S.mm), s = Math.min(aw / W, ah / W);
+  if (!(s > 0)) return 1;
+  return s >= 1 ? Math.floor(s) : s;           // integer above 1× keeps pixels crisp; below 1× the exact fit
+}
+const zoomNow = () => (S.zoom === "fit" ? fitZoom() : +S.zoom);
+function stepZoom(dir) {
+  const z = zoomNow();
+  const next = dir > 0 ? ZOOMS.find((v) => v > z + 1e-6) : [...ZOOMS].reverse().find((v) => v < z - 1e-6);
+  if (next) { S.zoom = next; save(); syncZoom(); draw(); }
+}
+function syncZoom() {
+  const z = zoomNow();
+  $("zoom-out-val").textContent = `${Math.round(z * 100)} %`;
+  $("zoom-fit").setAttribute("aria-pressed", String(S.zoom === "fit"));
+  $("zoom-in").disabled = z >= ZOOMS[ZOOMS.length - 1]; $("zoom-out").disabled = z <= ZOOMS[0];
+}
+
+// ---------- drawing ----------
+function paintBg(ctx, w, h, z) {
+  const bg = BGS[S.bg] || BGS.neutral;
+  if (bg[1]) { ctx.fillStyle = bg[1]; ctx.fillRect(0, 0, w, h); return; }
+  const c = Math.max(4, 8 * Math.max(1, Math.round(z / 2))); ctx.fillStyle = "#3b4149"; ctx.fillRect(0, 0, w, h); ctx.fillStyle = "#434a53";
+  for (let y = 0; y < h; y += c) for (let x = (y / c) % 2 ? c : 0; x < w; x += 2 * c) ctx.fillRect(x, y, c, c);
+}
+function drawGuides(ctx, z) {
+  ctx.save(); ctx.strokeStyle = "rgba(124,196,216,0.65)"; ctx.lineWidth = 1; ctx.setLineDash([Math.max(4, z * 2), Math.max(4, z * 2)]); ctx.beginPath();
+  const cy = Math.floor(st.H / 2) * z + 0.5, cx = Math.floor(st.W / 2) * z + 0.5;
+  ctx.moveTo(0, cy); ctx.lineTo(st.W * z, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, st.H * z); ctx.stroke(); ctx.restore();
 }
 function draw() {
   if (!st || S.tab !== "skeleton") return;
-  const z = zoomFor(), cv = $("cv");
-  const off = document.createElement("canvas"); off.width = st.W; off.height = st.H;
-  off.getContext("2d").putImageData(new ImageData(pixels(false), st.W, st.H), 0, 0);
-  cv.width = st.W * z; cv.height = st.H * z;
-  const ctx = cv.getContext("2d"); ctx.imageSmoothingEnabled = false;
-  if (S.bg === "checker") { const c = 8 * Math.max(1, Math.round(z / 2)); ctx.fillStyle = "#3b4149"; ctx.fillRect(0, 0, cv.width, cv.height); ctx.fillStyle = "#434a53"; for (let y = 0; y < cv.height; y += c) for (let x = (y / c) % 2 ? c : 0; x < cv.width; x += 2 * c) ctx.fillRect(x, y, c, c); }
-  else { ctx.fillStyle = { dark: "#121417", mid: "#6b7178", light: "#eef0f2", skin: "#c99a7c" }[S.bg]; ctx.fillRect(0, 0, cv.width, cv.height); }
-  ctx.drawImage(off, 0, 0, cv.width, cv.height);
-  if (S.guides) {
-    ctx.save(); ctx.strokeStyle = "rgba(124,196,216,0.65)"; ctx.setLineDash([Math.max(4, z * 2), Math.max(4, z * 2)]); ctx.beginPath();
-    const cy = Math.floor(st.H / 2) * z + 0.5, cx = Math.floor(st.W / 2) * z + 0.5;
-    ctx.moveTo(0, cy); ctx.lineTo(cv.width, cy); ctx.moveTo(cx, 0); ctx.lineTo(cx, cv.height); ctx.stroke(); ctx.restore();
-  }
-  drawLabels(z);
+  const z = zoomNow(), cv = $("cv"), w = Math.max(1, Math.round(st.W * z)), h = Math.max(1, Math.round(st.H * z));
+  const rgba = pixels(st, model, false);
+  if (hoverObj) for (let p = 0; p < st.W * st.H; p++) if (st.lab[p] && st.obj[p] !== hoverObj) { rgba[p * 4] *= 0.5; rgba[p * 4 + 1] *= 0.5; rgba[p * 4 + 2] *= 0.55; }
+  const off = document.createElement("canvas"); off.width = st.W; off.height = st.H; off.getContext("2d").putImageData(new ImageData(rgba, st.W, st.H), 0, 0);
+  cv.width = w; cv.height = h; cv.classList.toggle("soft", z < 1);
+  const ctx = cv.getContext("2d");
+  paintBg(ctx, w, h, z);
+  ctx.imageSmoothingEnabled = z < 1; ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(off, 0, 0, w, h);
+  if (S.guides) drawGuides(ctx, z);
+  const vp = $("viewport"); vp.classList.toggle("scroll", w > vp.clientWidth - 24 || h > vp.clientHeight - 24);
+  drawLabels(z); syncZoom();
 }
-// labels: vertebrae on one side of the column, rib numbers at the lateral edge of the cage
-function drawLabels(z) {
-  const box = $("lbl-layer"); box.innerHTML = "";
-  if (level() !== 2 || !S.labels) return;
-  const v = VIEWS.find((x) => x.id === S.view), spec = viewSpec(model, v, S.mm), side = Math.sin((v.yaw * Math.PI) / 180);
-  const put = (p, text, right) => { const d = document.createElement("span"); d.className = "lbl" + (right ? "" : " l"); d.textContent = text; d.style.top = p[1] * z + "px"; d.style.left = p[0] * z + "px"; box.appendChild(d); };
+// labels: vertebrae beside the column (outside the cage in front / back views), rib numbers at the cage's edge
+function labelList() {
+  const out = []; if (!S.labels) return out;
+  const v = VIEW(S.view), spec = viewSpec(model, S.view, S.mm), side = Math.sin((v.yaw * Math.PI) / 180);
   if (S.layers.spine) for (const el of model.els) {
     if (!["vertebra", "sacrum", "coccyx"].includes(el.kind)) continue;
     const p = R.project(el.o, spec);
-    // with the rib cage shown in front / back views, vertebra names sit outside the cage on the viewer's left
-    const off = S.layers.ribcage && Math.abs(side) < 0.75 && el.region !== "lumbar" && el.kind === "vertebra" && el.id !== "C1" && !/^C[2-6]$/.test(el.id) ? 175 : 50;
-    if (side > 0.3) put([p[0] + 44 / S.mm, p[1]], el.id, true); else put([p[0] - off / S.mm, p[1]], el.id, false);
+    const off = S.layers.ribcage && Math.abs(side) < 0.75 && el.kind === "vertebra" && /^(C7|T\d+)$/.test(el.id) ? 175 : 50;
+    if (side > 0.3) out.push({ x: p[0] + 44 / S.mm, y: p[1], t: el.id, right: true }); else out.push({ x: p[0] - off / S.mm, y: p[1], t: el.id, right: false });
   }
   if (S.layers.ribcage && Math.abs(side) < 0.75) {
-    // rib numbers on the subject's side that faces the viewer's right
-    const ribSide = Math.cos((v.yaw * Math.PI) / 180) >= 0 ? "L" : "R";
+    const ribSide = Math.cos((v.yaw * Math.PI) / 180) >= 0 ? "L" : "R"; let lastY = -1e9;
+    const ribs = [];
     model.els.forEach((el, k) => {
       if (el.kind !== "rib" || el.side !== ribSide) return;
       const rest = full.els[k]; let best = null, bx = -1e9;
       for (const nd of rest.geo.nodes) { const q = R.project(C.toWorld(el, [nd.p[0] - rest.o[0], nd.p[1] - rest.o[1], nd.p[2] - rest.o[2]]), spec); if (q[0] > bx) { bx = q[0]; best = q; } }
-      if (best) put([best[0] + 8 / S.mm, best[1]], String(el.n), true);
+      if (best) ribs.push({ x: best[0] + 8 / S.mm, y: best[1], t: String(el.n), right: true });
     });
+    ribs.sort((a, b) => a.y - b.y).forEach((r) => { if (r.y - lastY >= 11 / S.mm) { out.push(r); lastY = r.y; } });
+  }
+  return out;
+}
+function drawLabels(z) {
+  const box = $("lbl-layer"); box.innerHTML = "";
+  for (const l of labelList()) {
+    const d = document.createElement("span"); d.className = "lbl" + (l.right ? "" : " l"); d.textContent = l.t;
+    d.style.top = l.y * z + "px"; d.style.left = l.x * z + "px"; box.appendChild(d);
   }
 }
 let restyleT = 0;
-function restyle() { cancelAnimationFrame(restyleT); restyleT = requestAnimationFrame(() => { if (!geo) return; st = R.stylise(geo, model, styleOf()); draw(); }); }
+function restyle() { stopPlay(true); cancelAnimationFrame(restyleT); restyleT = requestAnimationFrame(() => { if (!geo) return; model = modelFor(S.pose); st = R.stylise(geo, model, styleOf()); draw(); }); }
 let token = 0;
 async function render() {
-  stopPlay();
-  if (S.tab === "skeleton") model = modelFor(level(), S.bone, S.pose);
-  save(); sync();
+  stopPlay(true); save(); syncTab();
   if (S.tab !== "skeleton") return;
+  model = modelFor(S.pose); syncAll();
   const t = ++token; $("busy").hidden = false; $("busy").textContent = "Rendering…";
-  const g = await geometry(level(), S.bone, S.view, S.mm, (p) => { if (t === token) $("busy").textContent = `Rendering… ${Math.round(p * 100)}%`; });
+  const g = await geometry(S.view, S.mm, (p) => { if (t === token) $("busy").textContent = `Rendering… ${Math.round(p * 100)} %`; });
   if (t !== token) return;
   geo = g; st = R.stylise(geo, model, styleOf()); $("busy").hidden = true;
-  const v = VIEWS.find((x) => x.id === S.view);
-  const what = level() === 1 ? (model.els[0].name || S.bone) : ["Spine", "rib cage", "clavicles"].filter((_, i) => S.layers[["spine", "ribcage", "clavicles"][i]]).join(", ") || "Nothing shown";
-  $("caption").textContent = `${what} · ${v.name}${v.pitch ? " (reference)" : ", eye level"} · ${st.W} × ${st.H} px frame at ${S.mm} mm/px · ${zoomFor()}×`;
-  draw();
-  updatePoseUI();
+  draw(); updateTech();
 }
 
-// ---------- hover ----------
-const counts = () => { const c = (k) => full.els.filter((e) => e.kind === k).length; return `24 vertebrae, sacrum, coccyx, ${c("disc")} discs · ${c("rib")} ribs, ${c("cartilage")} costal cartilages, sternum · 2 clavicles`; };
-const defaultStatus = () => level() === 1
-  ? `${model.els[0].name || S.bone} · hover to read pixels and anatomy`
-  : `${counts()} · ${full.els.length} separately editable elements · hover to identify`;
+// ---------- hover readout (only while pointing at a bone) ----------
 $("cv").addEventListener("mousemove", (e) => {
-  if (!st) return;
+  if (!st || playing) return;
   const r = e.target.getBoundingClientRect(), x = Math.floor(((e.clientX - r.left) / r.width) * st.W), y = Math.floor(((e.clientY - r.top) / r.height) * st.H);
   if (x < 0 || y < 0 || x >= st.W || y >= st.H) return;
   const p = y * st.W + x, o = st.lab[p] ? st.obj[p] : 0;
-  const dy = (st.H / 2 - y - 0.5) * S.mm;
-  let text = level() === 2 ? `px ${x}, ${y} · ${Math.round(model.pivot[1] + dy)} mm above the floor` : `px ${x}, ${y} · ${(dy).toFixed(0)} mm from pivot`;
-  if (o) { const el = model.els[o - 1]; text = `${el.name} · ${C.PART_NAMES[st.part[p]] || ""}${el.kind === "cartilage" && el.chordRatio ? ` · ends ${(el.chordRatio * 100).toFixed(1)} % of rest` : ""} · ${text}`; }
-  $("status").textContent = text;
-  if (o !== hoverObj && level() === 2) { hoverObj = o; draw(); }
+  if (o) { const el = model.els[o - 1]; $("hover").textContent = `${el.name} · ${C.PART_NAMES[st.part[p]] || ""}`; $("hover").hidden = false; }
+  else $("hover").hidden = true;
+  if (o !== hoverObj) { hoverObj = o; draw(); }
 });
-$("cv").addEventListener("mouseleave", () => { if (hoverObj) { hoverObj = 0; draw(); } $("status").textContent = defaultStatus(); });
+$("cv").addEventListener("mouseleave", () => { $("hover").hidden = true; if (hoverObj) { hoverObj = 0; draw(); } });
 
-// ---------- controls ----------
-function seg(id, items, key, after) {
+// ---------- generic controls ----------
+function seg(id, items, get, set, opts = {}) {
   const el = $(id); el.innerHTML = "";
-  for (const [val, label] of items) {
-    const b = document.createElement("button"); b.type = "button"; b.dataset.val = String(val); b.textContent = label;
-    b.addEventListener("click", () => { S[key] = val; after(); });
+  for (const [val, label, title] of items) {
+    const b = document.createElement("button"); b.type = "button"; b.dataset.val = String(val); b.textContent = label; if (title) b.title = title;
+    b.addEventListener("click", () => { if (!b.disabled) set(val); });
     el.appendChild(b);
   }
+  el._sync = () => el.querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.val === String(get()))));
+  return el;
 }
-const nav = $("tabs");
+// slider with a label, a value readout and end labels
+function slider(parent, o) {
+  const id = o.id, wrap = document.createElement("div"); wrap.className = "slider";
+  wrap.innerHTML = `<div class="top"><label for="${id}">${o.label}</label><output id="${id}-out" for="${id}"></output></div>
+    <input type="range" id="${id}" min="${o.min}" max="${o.max}" step="${o.step || 0.5}">${o.ends ? `<div class="ends" aria-hidden="true"><span>${o.ends[0]}</span><span>${o.ends[1]}</span></div>` : ""}`;
+  parent.appendChild(wrap);
+  const inp = wrap.querySelector("input"), out = wrap.querySelector("output");
+  const sync = () => { const v = o.get(); inp.value = v; out.textContent = o.fmt(v); if (o.disabled) inp.disabled = o.disabled(); };
+  inp.addEventListener("input", () => { o.set(+inp.value); out.textContent = o.fmt(+inp.value); });
+  wrap._sync = sync; sync(); return wrap;
+}
+const deg = (v, neg, pos) => (Math.abs(v) < 0.05 ? "0°" : `${Math.abs(v).toFixed(1)}° ${v > 0 ? pos : neg}`);
+
+// ---------- tabs ----------
+const tabsEl = $("tabs");
 TABS.forEach((T) => {
-  const b = document.createElement("button"); b.type = "button"; b.dataset.val = T.id; b.setAttribute("role", "tab");
-  b.innerHTML = `<b>${T.name}</b><span>${T.sub}</span>`;
+  const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.id = `tab-${T.id}`; b.dataset.val = T.id; b.textContent = T.name;
   b.addEventListener("click", () => { S.tab = T.id; hoverObj = 0; render(); });
-  nav.appendChild(b);
+  b.addEventListener("keydown", (e) => { if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return; const i = TABS.findIndex((x) => x.id === S.tab), n = TABS[(i + (e.key === "ArrowRight" ? 1 : 2)) % 3]; S.tab = n.id; render(); $(`tab-${n.id}`).focus(); });
+  tabsEl.appendChild(b);
 });
-seg("mode", [["full", "Whole skeleton"], ["bone", "Single bone"]], "mode", () => { if (S.mode === "full" && S.view === "top") S.view = "front"; hoverObj = 0; render(); });
-seg("bones", SPINE_BONES.map((b) => [b, b]), "bone", render);
-seg("ribs", Array.from({ length: 12 }, (_, i) => [`RIB${i + 1}_${S.ribSide}`, String(i + 1)]), "bone", render);
-const ribButtons = () => $("ribs").querySelectorAll("button").forEach((b, i) => { b.dataset.val = `RIB${i + 1}_${S.ribSide}`; });
-seg("rib-side", [["L", "Left"], ["R", "Right"]], "ribSide", () => { ribButtons(); if (/^RIB/.test(S.bone)) S.bone = S.bone.replace(/_[LR]$/, "_" + S.ribSide); render(); });
-seg("girdle", [["STERNUM", "Sternum"], ["CLAV_L", "Clavicle L"], ["CLAV_R", "Clavicle R"]], "bone", render);
-seg("views", VIEWS.map((v) => [v.id, SHORT[v.id]]), "view", render);
-seg("mm", [1, 1.5, 2, 3, 4].map((v) => [v, String(v)]), "mm", render);
-seg("zoom", [["fit", "Fit"], ...[1, 2, 3, 4, 6, 8].map((v) => [v, v + "×"])], "zoom", () => { save(); sync(); draw(); });
-seg("bg", [["checker", "Clear"], ["dark", "Dark"], ["mid", "Grey"], ["light", "Light"], ["skin", "Skin"]], "bg", () => { save(); sync(); draw(); });
-seg("colorby", [["none", "Palette"], ["part", "Anatomy"], ["region", "Region"]], "colorby", () => { save(); sync(); draw(); });
-for (const k of ["spine", "ribcage", "clavicles"]) $(`layer-${k}`).addEventListener("change", (e) => { S.layers[k] = e.target.checked; hoverObj = 0; render(); });
-const RANGES = { lightDir: (v) => v + "°", lightFront: (v) => v + "°", ambient: (v) => v.toFixed(2), aoStr: (v) => v.toFixed(2), exposure: (v) => v.toFixed(2), gap: (v) => v.toFixed(1) + " mm" };
-for (const k in RANGES) $(k).addEventListener("input", () => { S[k] = +$(k).value; $(k + "-out").textContent = RANGES[k](S[k]); save(); restyle(); });
-for (const k of ["outline", "lines", "rim", "clusters"]) $(k).addEventListener("change", () => { S[k] = $(k).checked; save(); sync(); restyle(); });
-for (const k of ["guides", "labels"]) $(k).addEventListener("change", () => { S[k] = $(k).checked; save(); draw(); });
-function palRow(id, key, from) {
-  const el = $(id); el.innerHTML = "";
-  SLOT.forEach((name, i) => {
-    if (i < from) return;
-    const l = document.createElement("label"); l.htmlFor = `${id}-${i}`;
-    l.innerHTML = `<input type="color" id="${id}-${i}">${name}`;
-    l.querySelector("input").addEventListener("input", (e) => { S[key][i] = e.target.value; if (key === "bone6") S.preset = ""; save(); sync(); draw(); });
-    el.appendChild(l);
-  });
+function syncTab() {
+  $("app").dataset.tab = S.tab;
+  tabsEl.querySelectorAll("button").forEach((b) => { const on = b.dataset.val === S.tab; b.setAttribute("aria-selected", String(on)); b.tabIndex = on ? 0 : -1; });
+  const T = TABS.find((t) => t.id === S.tab), sk = S.tab === "skeleton";
+  $("work").hidden = !sk; $("export-wrap").hidden = !sk; $("empty").hidden = sk;
+  if (!sk) { $("empty-title").textContent = `${T.name}: nothing here yet`; $("empty-text").textContent = T.empty; }
 }
-palRow("pal-bone", "bone6", 0); palRow("pal-disc", "disc6", 1);
-$("preset").innerHTML = Object.keys(PRESETS).map((k) => `<option value="${k}">${k}</option>`).join("") + `<option value="">Custom</option>`;
-$("preset").addEventListener("change", (e) => { if (PRESETS[e.target.value]) { S.bone6 = PRESETS[e.target.value].slice(); S.preset = e.target.value; save(); sync(); draw(); } });
-$("reset").addEventListener("click", () => { const keep = { tab: S.tab, mode: S.mode, bone: S.bone, view: S.view, pose: S.pose }; S = { ...DEFAULTS, bone6: DEFAULTS.bone6.slice(), disc6: DEFAULTS.disc6.slice(), layers: { ...DEFAULTS.layers }, ...keep }; render(); });
-$("copy").addEventListener("click", async () => {
-  const txt = JSON.stringify({ mmPerPx: S.mm, bone: Object.fromEntries(SLOT.map((s, i) => [s, S.bone6[i]])), cartilageAndDisc: Object.fromEntries(SLOT.slice(1).map((s, i) => [s, S.disc6[i + 1]])),
-    light: { direction: S.lightDir, towardViewer: S.lightFront }, ambient: S.ambient, crevice: S.aoStr, exposure: S.exposure,
-    rules: { outline: S.outline, interiorLines: S.lines, lineGapMm: S.gap, rimLight: S.rim, clusters: S.clusters } }, null, 2);
-  try { await navigator.clipboard.writeText(txt); flash("Style settings copied as JSON."); } catch (e) { flash("The browser blocked the clipboard."); }
+
+// ---------- view toolbar ----------
+const setView = (a, s) => { const [ca, cs] = angleOf(S.view); S.side = s || cs || S.side; S.view = viewIdOf(a || ca, S.side); hoverObj = 0; render(); };
+seg("angle", ANGLES.map(([a, n]) => [a, n, a === "q" ? "Three-quarter front" : a === "qb" ? "Three-quarter back" : ""]), () => angleOf(S.view)[0], (a) => setView(a, null));
+seg("side", [["R", "Right", "Subject's right side toward the camera"], ["L", "Left", "Subject's left side toward the camera"]], () => S.side, (s) => setView(null, s));
+function syncView() {
+  const [a, s] = angleOf(S.view); if (s) S.side = s;
+  $("angle")._sync(); $("side")._sync();
+  $("side").querySelectorAll("button").forEach((b) => { b.disabled = !s; });
+  const yaw = VIEW(S.view).yaw * Math.PI / 180, cx = 18 - Math.sin(yaw) * 14, cy = 18 + Math.cos(yaw) * 14;
+  // top-down compass: body (front facing down), camera dot; subject's left drawn on the right
+  $("orient").innerHTML = `<svg width="36" height="36" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="14" fill="none" stroke="#424a54"/>
+    <ellipse cx="18" cy="18" rx="8" ry="4.5" fill="#8f969e"/><rect x="16.5" y="21" width="3" height="3" fill="#8f969e"/>
+    <text x="27.5" y="20.5" font-size="7" fill="#8f969e" font-family="sans-serif">L</text><text x="5" y="20.5" font-size="7" fill="#8f969e" font-family="sans-serif">R</text>
+    <circle cx="${cx.toFixed(1)}" cy="${cy.toFixed(1)}" r="3.4" fill="#7cc4d8"/></svg>
+    <span>${ANGLE_NAMES[a]}${s ? ` · ${s === "R" ? "right" : "left"} side toward you` : ""}</span>`;
+}
+$("zoom-in").addEventListener("click", () => stepZoom(1));
+$("zoom-out").addEventListener("click", () => stepZoom(-1));
+$("zoom-fit").addEventListener("click", () => { S.zoom = "fit"; save(); draw(); });
+new ResizeObserver(() => draw()).observe($("viewport"));
+
+// ---------- movement ----------
+const DEMOS = TR.demoPoses();
+DEMOS.forEach((d) => {
+  const b = document.createElement("button"); b.type = "button"; b.textContent = DEMO_NAMES[d.id] || d.name; b.dataset.val = d.id;
+  b.addEventListener("click", () => { const was = playing; S.pose = normPose(clone(d.pose)); if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 }; onPose(true, was); });
+  $("demos").appendChild(b);
 });
-function sync() {
-  $("app").dataset.tab = S.tab; $("app").dataset.level = level();
-  nav.querySelectorAll("button").forEach((b) => { const on = b.dataset.val === S.tab; b.setAttribute("aria-selected", String(on)); b.setAttribute("aria-pressed", String(on)); });
-  const mark = (id, val) => $(id).querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.val === String(val))));
-  mark("mode", S.mode); mark("bones", S.bone); mark("ribs", S.bone); mark("rib-side", S.ribSide); mark("girdle", S.bone);
-  mark("views", S.view); mark("mm", S.mm); mark("zoom", S.zoom); mark("bg", S.bg); mark("colorby", S.colorby);
-  $("views").querySelector('[data-val="top"]').disabled = level() !== 1;
-  $("colorby").querySelector('[data-val="region"]').disabled = level() !== 2;
-  const b = full.els.find((e) => e.id === S.bone); $("bone-name").textContent = level() === 1 && b ? b.name : "";
+seg("region", REGIONS, () => S.region, (r) => { S.region = r; save(); buildRegion(); });
+let regionSliders = [];
+function buildRegion() {
+  $("region")._sync();
+  const box = $("region-controls"); box.innerHTML = ""; regionSliders = [];
+  if (S.region !== "clavicle") {
+    const r = S.region, l = SR.regionLimits(r);
+    regionSliders.push(slider(box, { id: "p-fe", label: "Bend forward / back", min: (-l.ext).toFixed(1), max: l.flex.toFixed(1), ends: ["back", "forward"],
+      get: () => S.pose[r].fe, set: (v) => { S.pose[r].fe = v; onPose(); }, fmt: (v) => deg(v, "back", "forward") }));
+    regionSliders.push(slider(box, { id: "p-lb", label: "Bend sideways", min: (-l.lb).toFixed(1), max: l.lb.toFixed(1), ends: ["left", "right"],
+      get: () => -S.pose[r].lb, set: (v) => { S.pose[r].lb = -v; onPose(); }, fmt: (v) => deg(-v, "right", "left") }));
+    regionSliders.push(slider(box, { id: "p-ar", label: "Twist", min: (-l.ar).toFixed(1), max: l.ar.toFixed(1), ends: ["left", "right"],
+      get: () => -S.pose[r].ar, set: (v) => { S.pose[r].ar = -v; onPose(); }, fmt: (v) => deg(-v, "right", "left") }));
+    const env = document.createElement("p"); env.className = "hint"; env.id = "env-note"; box.appendChild(env);
+  } else {
+    const ck = document.createElement("label"); ck.className = "check"; ck.htmlFor = "clav-link";
+    ck.innerHTML = `<input type="checkbox" id="clav-link"> Move both clavicles together`; box.appendChild(ck);
+    const inp = ck.querySelector("input"); inp.checked = S.clavLink;
+    inp.addEventListener("change", () => { S.clavLink = inp.checked; if (S.clavLink) { S.pose.clavicle.R = { ...S.pose.clavicle.L }; onPose(); } save(); buildRegion(); });
+    const L = TR.clavLimits();
+    for (const side of S.clavLink ? ["L"] : ["L", "R"]) {
+      if (!S.clavLink) { const h = document.createElement("div"); h.className = "sub"; h.textContent = side === "L" ? "Left clavicle" : "Right clavicle"; box.appendChild(h); }
+      const setC = (ax) => (v) => { S.pose.clavicle[side][ax] = v; if (S.clavLink) S.pose.clavicle.R[ax] = v; onPose(); };
+      regionSliders.push(slider(box, { id: `c-${side}-elev`, label: "Raise / lower", min: L.elev[0].toFixed(1), max: L.elev[1].toFixed(1), ends: ["lower", "raise"],
+        get: () => S.pose.clavicle[side].elev, set: setC("elev"), fmt: (v) => deg(v, "down", "up") }));
+      regionSliders.push(slider(box, { id: `c-${side}-prot`, label: "Forward / back", min: L.prot[0].toFixed(1), max: L.prot[1].toFixed(1), ends: ["back", "forward"],
+        get: () => S.pose.clavicle[side].prot, set: setC("prot"), fmt: (v) => deg(v, "back", "forward") }));
+      regionSliders.push(slider(box, { id: `c-${side}-rot`, label: "Roll back", min: L.rot[0].toFixed(1), max: L.rot[1].toFixed(1), ends: ["none", "full"],
+        get: () => S.pose.clavicle[side].rot, set: setC("rot"), fmt: (v) => deg(v, "", "back") }));
+    }
+    const env = document.createElement("p"); env.className = "hint"; env.id = "env-note"; box.appendChild(env);
+  }
+  syncPose();
+}
+const rootSliders = [
+  ["tilt", "Pelvic tilt", ["back", "forward"], (v) => v, (v) => deg(v, "back", "forward")],
+  ["obliquity", "Obliquity", ["left hip up", "left hip down"], (v) => v, (v) => deg(v, "left up", "left down")],
+  ["rotation", "Rotation", ["left", "right"], (v) => -v, (v) => deg(-v, "right", "left")],
+].map(([ax, label, ends, map, fmt]) => slider($("root-controls"), { id: `root-${ax}`, label, min: -ROM.SETTINGS.root[ax], max: ROM.SETTINGS.root[ax], ends,
+  get: () => map(S.pose.root[ax]), set: (v) => { S.pose.root[ax] = map(v); onPose(); }, fmt, disabled: () => S.sacrumFixed }));
+$("sacrum-fixed").addEventListener("change", (e) => { S.sacrumFixed = e.target.checked; if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 }; onPose(true); });
+$("reset-pose").addEventListener("click", () => { S.pose = TR.ZERO(); onPose(true); });
+let poseT = 0;
+function onPose(now, keepPlaying) { stopPlay(true); syncPose(); save(); clearTimeout(poseT); poseT = setTimeout(() => render().then(() => { if (keepPlaying && !TR.isZero(S.pose)) play(); }), now ? 0 : 300); }
+function syncPose() {
+  regionSliders.forEach((s) => s._sync()); rootSliders.forEach((s) => s._sync()); $("sacrum-fixed").checked = S.sacrumFixed;
+  const key = poseKey(S.pose), d = DEMOS.find((x) => poseKey(x.pose) === key);
+  $("demos").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(!!d && b.dataset.val === d.id)));
+  $("pose-name").innerHTML = `Pose: <b>${TR.isZero(S.pose) ? "Neutral" : d ? DEMO_NAMES[d.id] : "Custom"}</b>`;
+  $("play").disabled = TR.isZero(S.pose); $("reset-pose").disabled = TR.isZero(S.pose);
+  $("play").title = TR.isZero(S.pose) ? "Choose a movement first" : "Play neutral → pose → neutral (Space)";
+  const env = $("env-note");
+  if (env) {
+    if (S.region === "clavicle") { const q = TR.clavSolve(S.pose.clavicle.L), q2 = TR.clavSolve(S.pose.clavicle.R), e = Math.max(q.envelope, q2.envelope);
+      env.textContent = e ? `Using ${Math.round(Math.min(1, e) * 100)} % of the clavicles' combined range${q.scaled || q2.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
+    else { const r = SR.solve(S.pose).regions[S.region]; env.textContent = r.envelope ? `Using ${Math.round(Math.min(1, r.envelope) * 100)} % of this region's combined range${r.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
+  }
+}
+
+// ---------- playback: neutral → pose → neutral, eased, five unique poses rendered once ----------
+const FRACS = [0, 0.1464, 0.5, 0.8536, 1], SEQ = [0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 0, 0];
+let playT = 0, playing = false, frames = null, framesKey = "", frameK = 0, preparing = false;
+const playKey = () => `${poseKey(S.pose)}|${S.view}|${S.mm}|${visible().join(",")}|${JSON.stringify(styleOf())}`;
+function setPlayBtn() { $("play").textContent = playing ? "❚❚ Pause" : "▶ Play"; $("play").setAttribute("aria-pressed", String(playing)); }
+function stopPlay(invalidate) {
+  if (playT) clearInterval(playT); playT = 0; preparing = false;
+  if (invalidate) { frames = null; frameK = 0; }
+  if (playing) { playing = false; setPlayBtn(); }
+}
+async function play() {
+  if (TR.isZero(S.pose)) return;
+  playing = true; setPlayBtn(); $("hover").hidden = true; hoverObj = 0;
+  const key = playKey();
+  if (!frames || framesKey !== key) {
+    frames = null; preparing = true; const target = clone(S.pose), list = [];
+    for (let i = 0; i < FRACS.length; i++) {
+      if (!playing || !preparing) return;
+      $("busy").hidden = false; $("busy").textContent = `Preparing playback ${i + 1}/${FRACS.length}…`;
+      const p = TR.scalePose(target, FRACS[i]), g = await geometry(S.view, S.mm, null, p), m = modelFor(p);
+      list.push({ st: R.stylise(g, m, styleOf()), m });
+    }
+    preparing = false; $("busy").hidden = true; if (!playing) return;
+    frames = list; framesKey = key; frameK = 0;
+  }
+  playT = setInterval(() => { const f = frames[SEQ[frameK % SEQ.length]]; st = f.st; model = f.m; draw(); frameK++; }, 110);
+}
+$("play").addEventListener("click", () => { if (playing) { stopPlay(false); $("busy").hidden = true; } else play(); });
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeMenu();
+  if (S.tab !== "skeleton" || e.target.closest("input, select, textarea, button, summary")) return;
+  if (e.key === " ") { e.preventDefault(); $("play").click(); }
+});
+
+// ---------- visibility ----------
+for (const k of ["spine", "ribcage", "clavicles"]) $(`layer-${k}`).addEventListener("change", (e) => { S.layers[k] = e.target.checked; hoverObj = 0; render(); });
+for (const k of ["labels", "guides"]) $(k).addEventListener("change", (e) => { S[k] = e.target.checked; save(); syncExportNote(); draw(); });
+seg("colorby", [["none", "Off"], ["part", "Anatomy"], ["region", "Region"]], () => S.colorby, (v) => { S.colorby = v; save(); syncVis(); draw(); });
+function syncVis() {
   for (const k of ["spine", "ribcage", "clavicles"]) $(`layer-${k}`).checked = S.layers[k];
-  for (const k in RANGES) { $(k).value = S[k]; $(k + "-out").textContent = RANGES[k](S[k]); }
-  for (const k of ["outline", "lines", "rim", "clusters", "guides", "labels"]) $(k).checked = S[k];
-  $("gap").disabled = !S.lines;
-  SLOT.forEach((_, i) => { $(`pal-bone-${i}`).value = S.bone6[i]; if (i) $(`pal-disc-${i}`).value = S.disc6[i]; });
-  $("preset").value = PRESETS[S.preset] ? S.preset : "";
+  $("labels").checked = S.labels; $("guides").checked = S.guides; $("colorby")._sync();
   const lg = $("legend");
   if (S.colorby === "none") lg.hidden = true;
   else {
@@ -2424,118 +2604,110 @@ function sync() {
       : [...new Set(Object.keys(C.PART_NAMES).map(Number))].filter((k) => k !== 18).map((k) => [C.PART_NAMES[k], PART_COLORS[k]]);
     lg.innerHTML = items.map(([n, c]) => `<span><i style="background:${c}"></i>${n}</span>`).join("");
   }
-  $("status").textContent = S.tab === "skeleton" ? defaultStatus() : `${TABS.find((t) => t.id === S.tab).name}: no artwork yet`;
+  syncExportNote();
 }
-let flashT; function flash(m) { const el = $("toast"); el.textContent = m; el.hidden = false; clearTimeout(flashT); flashT = setTimeout(() => (el.hidden = true), 2400); }
-new ResizeObserver(() => { if (S.zoom === "fit") draw(); }).observe($("stage"));
 
-// ---------- export: the current frame at 1 px per pixel, transparent ----------
-let downloads = null;
-const inClaude = () => !!(window.claude && typeof window.claude.use === "function");
-(function initDl() { let n = 0; const tick = () => { if (inClaude()) { window.claude.use("downloads").then((d) => { downloads = d; if (!d) $("save").hidden = true; }).catch(() => {}); return; } if (++n < 6) setTimeout(tick, 500); }; tick(); })();
-$("save").addEventListener("click", async () => {
-  if (!st || S.tab !== "skeleton") return;
-  const off = document.createElement("canvas"); off.width = st.W; off.height = st.H;
-  off.getContext("2d").putImageData(new ImageData(pixels(true), st.W, st.H), 0, 0);
-  const blob = await new Promise((res) => off.toBlob(res, "image/png"));
-  const name = `${level() === 1 ? "bone_" + S.bone : "skeleton"}_${S.view}_${S.mm}mm.png`;
-  if (downloads) { try { await downloads.save({ filename: name, data: blob }); flash("Saved " + name); } catch (e) { if (e && e.code === "declined") flash("Save cancelled."); } }
-  else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); flash("Downloaded " + name); }
+// ---------- appearance ----------
+$("preset").innerHTML = Object.keys(PRESETS).map((k) => `<option value="${k}">${k}</option>`).join("") + `<option value="">Custom</option>`;
+$("preset").addEventListener("change", (e) => { if (PRESETS[e.target.value]) { S.bone6 = PRESETS[e.target.value].slice(); S.preset = e.target.value; save(); syncLook(); draw(); } });
+function palRow(id, key, from) {
+  const el = $(id); el.innerHTML = "";
+  SLOT.forEach((name, i) => {
+    if (i < from) return;
+    const l = document.createElement("label"); l.htmlFor = `${id}-${i}`;
+    l.innerHTML = `<input type="color" id="${id}-${i}">${name}`;
+    l.querySelector("input").addEventListener("input", (e) => { S[key] = S[key].slice(); S[key][i] = e.target.value; if (key === "bone6") S.preset = ""; save(); syncLook(); draw(); });
+    el.appendChild(l);
+  });
+}
+palRow("pal-bone", "bone6", 0); palRow("pal-disc", "disc6", 1);
+seg("bg", Object.entries(BGS).map(([k, v]) => [k, v[0]]), () => S.bg, (v) => { S.bg = v; save(); syncLook(); draw(); });
+seg("mm", [[1, "Fine · 1 mm"], [1.5, "1.5"], [2, "2"], [3, "3"], [4, "Coarse · 4"]], () => S.mm, (v) => { S.mm = v; render(); });
+const lightSliders = [["lightDir", "Direction", 0, 355, 1, (v) => v + "°"], ["lightFront", "Toward viewer", 0, 85, 1, (v) => v + "°"], ["ambient", "Ambient", 0, 0.5, 0.01, (v) => v.toFixed(2)],
+  ["aoStr", "Crevice shadow", 0, 1.5, 0.05, (v) => v.toFixed(2)], ["exposure", "Exposure", 0.6, 1.5, 0.01, (v) => v.toFixed(2)]]
+  .map(([k, label, min, max, step, fmt]) => slider($("light-controls"), { id: k, label, min, max, step, get: () => S[k], set: (v) => { S[k] = v; save(); restyle(); }, fmt }));
+const gapSlider = slider($("gap-control"), { id: "gap", label: "Contour depth jump", min: 1, max: 10, step: 0.5, get: () => S.gap, set: (v) => { S.gap = v; save(); restyle(); }, fmt: (v) => v.toFixed(1) + " mm", disabled: () => !S.lines });
+for (const k of ["outline", "lines", "rim", "clusters"]) $(k).addEventListener("change", () => { S[k] = $(k).checked; save(); syncLook(); restyle(); });
+$("reset-look").addEventListener("click", () => {
+  const mmChanged = S.mm !== LOOK.mm; Object.assign(S, clone(LOOK)); save(); syncLook();
+  if (mmChanged) render(); else restyle();
+  flash("Appearance reset: palette, background, pixel detail, lighting, pixel rules.");
 });
-// ---------- pose: regional controls, clavicles, demonstrations, playback ----------
-const DEMOS = TR.demoPoses();
-const AXES = [["fe", "Flex · Ext", (l) => [-l.ext, l.flex]], ["lb", "Bend L · R", (l) => [-l.lb, l.lb]], ["ar", "Rotate L · R", (l) => [-l.ar, l.ar]]];
-const RNAME = { cervical: "Cervical (C1–T1)", thoracic: "Thoracic (T1–L1)", lumbar: "Lumbar (L1–S1)" };
-const ps = $("pose-sliders");
-for (const r of ROM.REGIONS) {
-  const l = SR.regionLimits(r), h = document.createElement("div");
-  h.className = "region-h"; h.innerHTML = `${RNAME[r]}<span id="env-${r}"></span>`; ps.appendChild(h);
-  for (const [ax, label, rng] of AXES) {
-    const [lo, hi] = rng(l), row = document.createElement("div"); row.className = "range pose";
-    row.innerHTML = `<label for="p-${r}-${ax}">${label}</label><input type="range" id="p-${r}-${ax}" min="${lo.toFixed(1)}" max="${hi.toFixed(1)}" step="0.5"><output id="p-${r}-${ax}-out"></output>`;
-    ps.appendChild(row);
-    // sliders read left = extension / right bend / right rotation; the rig's sign is + flexion, + left
-    row.querySelector("input").addEventListener("input", (e) => { const v = +e.target.value; S.pose[r][ax] = ax === "fe" ? v : -v; onPose(); });
-  }
-}
-const ROOT = [["tilt", "Pelvic tilt", ROM.SETTINGS.root.tilt], ["obliquity", "Obliquity", ROM.SETTINGS.root.obliquity], ["rotation", "Rotation", ROM.SETTINGS.root.rotation]];
-for (const [ax, label, lim] of ROOT) {
-  const row = document.createElement("div"); row.className = "range pose";
-  row.innerHTML = `<label for="p-root-${ax}">${label}</label><input type="range" id="p-root-${ax}" min="${-lim}" max="${lim}" step="0.5"><output id="p-root-${ax}-out"></output>`;
-  $("root-sliders").appendChild(row);
-  row.querySelector("input").addEventListener("input", (e) => { S.pose.root[ax] = +e.target.value; onPose(); });
-}
-// clavicles: each side separately controllable (sternoclavicular joint); optional mirroring
-const CL = TR.clavLimits(), CLAX = [["elev", "Elevation", CL.elev], ["prot", "Protraction", CL.prot], ["rot", "Post. rotation", CL.rot]];
-if (S.clavLink === undefined) S.clavLink = true;
-for (const side of ["L", "R"]) {
-  const h = document.createElement("div"); h.className = "region-h"; h.innerHTML = `Clavicle ${side === "L" ? "left" : "right"}<span id="clav-env-${side}"></span>`; $("clav-sliders").appendChild(h);
-  for (const [ax, label, rng] of CLAX) {
-    const row = document.createElement("div"); row.className = "range pose";
-    row.innerHTML = `<label for="c-${side}-${ax}">${label}</label><input type="range" id="c-${side}-${ax}" min="${rng[0].toFixed(1)}" max="${rng[1].toFixed(1)}" step="0.5"><output id="c-${side}-${ax}-out"></output>`;
-    $("clav-sliders").appendChild(row);
-    row.querySelector("input").addEventListener("input", (e) => { const v = +e.target.value; S.pose.clavicle[side][ax] = v; if (S.clavLink) S.pose.clavicle[side === "L" ? "R" : "L"][ax] = v; onPose(); });
-  }
-}
-$("clav-link").addEventListener("change", (e) => { S.clavLink = e.target.checked; save(); });
-if (S.sacrumFixed === undefined) S.sacrumFixed = true;
-$("sacrum-fixed").addEventListener("change", (e) => { S.sacrumFixed = e.target.checked; if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 }; onPose(); });
-DEMOS.forEach((d) => {
-  const b = document.createElement("button"); b.type = "button"; b.textContent = d.name; b.dataset.val = d.id;
-  b.addEventListener("click", () => { S.pose = normPose(JSON.parse(JSON.stringify(d.pose))); onPose(true); });
-  $("demos").appendChild(b);
+$("copy").addEventListener("click", async () => {
+  const txt = JSON.stringify({ mmPerPx: S.mm, bone: Object.fromEntries(SLOT.map((s, i) => [s, S.bone6[i]])), cartilageAndDisc: Object.fromEntries(SLOT.slice(1).map((s, i) => [s, S.disc6[i + 1]])),
+    background: BGS[S.bg][1] || "transparent", light: { direction: S.lightDir, towardViewer: S.lightFront }, ambient: S.ambient, crevice: S.aoStr, exposure: S.exposure,
+    rules: { outline: S.outline, interiorLines: S.lines, lineGapMm: S.gap, rimLight: S.rim, clusters: S.clusters } }, null, 2);
+  try { await navigator.clipboard.writeText(txt); flash("Style settings copied as JSON."); } catch (e) { flash("The browser blocked the clipboard."); }
 });
-$("to-neutral").addEventListener("click", () => { S.pose = TR.ZERO(); onPose(true); });
-let poseT = 0;
-function onPose(now) { stopPlay(); updatePoseUI(); save(); clearTimeout(poseT); poseT = setTimeout(render, now ? 0 : 350); }
-const fmt = (v) => (v > 0 ? "+" : "") + v.toFixed(1) + "°";
-function updatePoseUI() {
-  if (level() !== 2 || S.tab !== "skeleton") return;
-  const sol = SR.solve(S.pose);
-  for (const r of ROM.REGIONS) {
-    for (const [ax] of AXES) { const v = S.pose[r][ax], shown = ax === "fe" ? v : -v; $(`p-${r}-${ax}`).value = shown; $(`p-${r}-${ax}-out`).textContent = fmt(v); }
-    const e = sol.regions[r].envelope; $(`env-${r}`).textContent = e ? `${Math.round(Math.min(1, e) * 100)} % of envelope${sol.regions[r].scaled ? " (scaled)" : ""}` : "";
-  }
-  for (const [ax] of ROOT) { $(`p-root-${ax}`).value = S.pose.root[ax]; $(`p-root-${ax}-out`).textContent = fmt(S.pose.root[ax]); $(`p-root-${ax}`).disabled = S.sacrumFixed; }
-  $("sacrum-fixed").checked = S.sacrumFixed; $("clav-link").checked = S.clavLink;
-  for (const side of ["L", "R"]) {
-    for (const [ax] of CLAX) { const v = S.pose.clavicle[side][ax]; $(`c-${side}-${ax}`).value = v; $(`c-${side}-${ax}-out`).textContent = fmt(v); }
-    const q = TR.clavSolve(S.pose.clavicle[side]); $(`clav-env-${side}`).textContent = q.envelope ? `${Math.round(Math.min(1, q.envelope) * 100)} %${q.scaled ? " (scaled)" : ""}` : "";
-  }
-  const key = poseKey(S.pose), d = DEMOS.find((x) => poseKey(x.pose) === key);
-  $("pose-state").textContent = TR.isZero(S.pose) ? "neutral" : d ? d.name.toLowerCase() : "custom";
-  $("demos").querySelectorAll("button").forEach((b) => b.setAttribute("aria-pressed", String(!!d && b.dataset.val === d.id)));
-  // per-segment readout: angle and share of that segment's cap
-  const rows = ROM.SEGMENTS.map((s) => { const a = sol.segments[s.id], c = Math.max(Math.abs(a.fe) / (a.fe >= 0 ? s.cap.flex : s.cap.ext), Math.abs(a.lb) / s.cap.lb, Math.abs(a.ar) / s.cap.ar);
-    return `<tr><td>${s.id}</td><td>${a.fe.toFixed(1)}</td><td>${a.lb.toFixed(1)}</td><td>${a.ar.toFixed(1)}</td><td class="bar">${Math.round(c * 100)}%</td></tr>`; }).join("");
-  $("seg-table").innerHTML = `<table><tr><th>Segment</th><th>Flex</th><th>Bend L</th><th>Rot L</th><th>of cap</th></tr>${rows}</table>`;
-  // rib cage response to the current spinal pose
-  const m = posed(S.pose), th = m.thorax;
-  if (!th) $("ribcage-state").textContent = "Rib cage at rest.";
+function syncLook() {
+  $("preset").value = PRESETS[S.preset] ? S.preset : "";
+  SLOT.forEach((_, i) => { $(`pal-bone-${i}`).value = S.bone6[i]; if (i) $(`pal-disc-${i}`).value = S.disc6[i]; });
+  $("bg")._sync(); $("mm")._sync(); lightSliders.forEach((s) => s._sync()); gapSlider._sync();
+  for (const k of ["outline", "lines", "rim", "clusters"]) $(k).checked = S[k];
+  syncExportNote();
+}
+
+// ---------- technical details ----------
+function updateTech() {
+  const sol = SR.solve(S.pose), pc = (e) => (e ? `${Math.round(Math.min(1, e) * 100)} %${e > 1 ? " (scaled)" : ""}` : "0 %");
+  const q = ["L", "R"].map((s) => TR.clavSolve(S.pose.clavicle[s]));
+  $("envelopes").innerHTML = [["Neck", sol.regions.cervical.envelope], ["Upper back", sol.regions.thoracic.envelope], ["Lower back", sol.regions.lumbar.envelope], ["Clavicle left", q[0].envelope], ["Clavicle right", q[1].envelope]]
+    .map(([n, e]) => `<dt>${n}</dt><dd>${pc(e)}</dd>`).join("");
+  const th = model.thorax;
+  if (!th) $("ribcage").innerHTML = `<dt>State</dt><dd>at rest</dd>`;
   else {
     const cv = Math.max(...Object.values(th.theta).map(Math.abs)), ch = Object.values(th.chord), ar = Object.values(th.stretch);
-    $("ribcage-state").textContent = `Rib cage: ribs turn up to ${cv.toFixed(1)}° at their costovertebral joints; cartilage ends ${(Math.min(...ch) * 100).toFixed(1)}–${(Math.max(...ch) * 100).toFixed(1)} % of rest distance, cartilage length ${(Math.max(...ar) * 100).toFixed(1)} % at most.`;
+    $("ribcage").innerHTML = `<dt>Costovertebral rotation, max</dt><dd>${cv.toFixed(1)}°</dd><dt>Cartilage end distance</dt><dd>${(Math.min(...ch) * 100).toFixed(1)}–${(Math.max(...ch) * 100).toFixed(1)} %</dd>
+      <dt>Cartilage length, max</dt><dd>${(Math.max(...ar) * 100).toFixed(1)} %</dd><dt>Sternum fit residual</dt><dd>${th.residual.toFixed(2)}</dd>`;
   }
-  $("play").disabled = TR.isZero(S.pose);
+  const rows = ROM.SEGMENTS.map((s) => { const a = sol.segments[s.id], c = Math.max(Math.abs(a.fe) / (a.fe >= 0 ? s.cap.flex : s.cap.ext), Math.abs(a.lb) / s.cap.lb, Math.abs(a.ar) / s.cap.ar);
+    return `<tr><td>${s.id}</td><td>${a.fe.toFixed(1)}</td><td>${a.lb.toFixed(1)}</td><td>${a.ar.toFixed(1)}</td><td>${Math.round(c * 100)}%</td></tr>`; }).join("");
+  $("seg-table").innerHTML = `<table><tr><th>Segment</th><th>Flex</th><th>Bend L</th><th>Rot L</th><th>of cap</th></tr>${rows}</table>`;
+  const n = (k) => full.els.filter((e) => e.kind === k).length;
+  $("model-info").innerHTML = `<dt>Subject</dt><dd>female, 183 cm, 78 kg</dd><dt>Elements</dt><dd>${full.els.length}</dd><dt>Vertebrae, discs</dt><dd>24 + S + Co, ${n("disc")}</dd>
+    <dt>Ribs, cartilages</dt><dd>${n("rib")}, ${n("cartilage")}</dd><dt>Sternum, clavicles</dt><dd>${n("sternum")}, ${n("clavicle")}</dd>
+    <dt>Frame</dt><dd>${st ? `${st.W} × ${st.H} px` : ""} at ${S.mm} mm/px</dd>`;
 }
-// playback: neutral -> pose -> neutral, eased (in-out sine, as in pixelfx); five unique poses rendered once, then reused
-const FRACS = [0, 0.1464, 0.5, 0.8536, 1], SEQ = [0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 0, 0];
-let playT = 0, playing = false;
-function stopPlay() { if (playT) clearInterval(playT); playT = 0; if (playing) { playing = false; $("play").textContent = "Play"; } }
-$("play").addEventListener("click", async () => {
-  if (playing) { stopPlay(); render(); return; }
-  playing = true; $("play").textContent = "Stop";
-  const target = JSON.parse(JSON.stringify(S.pose)), view = S.view, mmv = S.mm, frames = [];
-  for (let i = 0; i < FRACS.length; i++) {
-    if (!playing) return;
-    $("busy").hidden = false; $("busy").textContent = `Preparing playback ${i + 1}/${FRACS.length}…`;
-    const p = TR.scalePose(target, FRACS[i]), g = await geometry(2, "", view, mmv, null, p), m = modelFor(2, "", p);
-    frames.push({ st: R.stylise(g, m, styleOf()), m });
-  }
-  $("busy").hidden = true; if (!playing) return;
-  let k = 0;
-  playT = setInterval(() => { const f = frames[SEQ[k % SEQ.length]]; st = f.st; model = f.m; draw(); k++; }, 110);
+
+// ---------- export ----------
+let downloads = null;
+const inClaude = () => !!(window.claude && typeof window.claude.use === "function");
+(function initDl() { let n = 0; const tick = () => { if (inClaude()) { window.claude.use("downloads").then((d) => { downloads = d; }).catch(() => {}); return; } if (++n < 6) setTimeout(tick, 500); }; tick(); })();
+function closeMenu() { $("export-menu").hidden = true; $("export").setAttribute("aria-expanded", "false"); }
+$("export").addEventListener("click", (e) => { e.stopPropagation(); const m = $("export-menu"); m.hidden = !m.hidden; $("export").setAttribute("aria-expanded", String(!m.hidden)); if (!m.hidden) { syncExportNote(); $("exp-art").focus(); } });
+document.addEventListener("click", (e) => { if (!e.target.closest("#export-wrap")) closeMenu(); });
+function syncExportNote() {
+  const extra = [BGS[S.bg][1] ? `${BGS[S.bg][0].toLowerCase()} background` : "transparent background", S.colorby !== "none" ? `${S.colorby === "part" ? "anatomy" : "region"} colours` : null, S.labels ? "labels" : null, S.guides ? "guides" : null].filter(Boolean);
+  $("exp-view-note").textContent = `Exactly what the preview shows (${extra.join(", ")}), at 2× so text stays readable.`;
+}
+async function saveBlob(canvas, name) {
+  const blob = await new Promise((res) => canvas.toBlob(res, "image/png"));
+  if (downloads) { try { await downloads.save({ filename: name, data: blob }); flash("Saved " + name); } catch (e) { if (e && e.code === "declined") flash("Save cancelled."); } }
+  else { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); a.remove(); flash("Downloaded " + name); }
+}
+const baseName = () => { const d = DEMOS.find((x) => poseKey(x.pose) === poseKey(S.pose)); return `skeleton_${TR.isZero(S.pose) ? "neutral" : d ? d.id : "custom"}_${S.view}_${S.mm}mm`; };
+$("exp-art").addEventListener("click", () => {
+  closeMenu(); if (!st) return;
+  const off = document.createElement("canvas"); off.width = st.W; off.height = st.H;
+  off.getContext("2d").putImageData(new ImageData(pixels(st, model, true), st.W, st.H), 0, 0);
+  saveBlob(off, baseName() + ".png");
 });
+$("exp-view").addEventListener("click", () => {
+  closeMenu(); if (!st) return;
+  const z = 2, src = document.createElement("canvas"); src.width = st.W; src.height = st.H;
+  src.getContext("2d").putImageData(new ImageData(pixels(st, model, false), st.W, st.H), 0, 0);
+  const off = document.createElement("canvas"); off.width = st.W * z; off.height = st.H * z;
+  const ctx = off.getContext("2d"); paintBg(ctx, off.width, off.height, z); ctx.imageSmoothingEnabled = false; ctx.drawImage(src, 0, 0, off.width, off.height);
+  if (S.guides) drawGuides(ctx, z);
+  ctx.font = "11px 'IBM Plex Mono', monospace"; ctx.fillStyle = "#8f969e"; ctx.textBaseline = "middle";
+  for (const l of labelList()) { ctx.textAlign = l.right ? "left" : "right"; ctx.fillText(l.t, l.x * z, l.y * z); }
+  saveBlob(off, baseName() + "_preview.png");
+});
+let flashT; function flash(m) { const el = $("toast"); el.textContent = m; el.hidden = false; clearTimeout(flashT); flashT = setTimeout(() => (el.hidden = true), 2600); }
+
+// ---------- start ----------
+function syncAll() { syncView(); syncVis(); syncLook(); syncPose(); syncZoom(); setPlayBtn(); }
+buildRegion();
 render();
 })();
 

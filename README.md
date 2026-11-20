@@ -11,15 +11,21 @@ The lab has exactly three tabs:
 
 | Tab | Status | What it shows |
 |---|---|---|
-| **Skeleton** | spine and rig approved; rib cage and clavicles awaiting review | the whole skeleton as it is completed: C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs, 12 rib pairs with their costal cartilages, sternum and both clavicles, with the spinal rig, the rib-cage response and clavicle controls. *Single bone* shows any bone in its own frame (L3 is the approved style study; a top view is available here) |
+| **Skeleton** | spine, rig, rib cage and clavicles approved | the assembled skeleton: C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs, 12 rib pairs with their costal cartilages, sternum and both clavicles |
 | **Body** | not started | muscle and soft tissue around the skeleton (weight is accounted for here) |
 | **Clothing** | not started | close-fitting garments following the body |
 
-The Skeleton tab has one set of controls: whole skeleton or single bone, layers (spine, rib cage, clavicles), pose
-(demonstrations, playback, regional spine controls, clavicles), camera angle (eight eye-level views about one pivot; a
-point keeps its screen height in every view), pixel scale (1–4 mm/px), zoom, background, light, pixel rules, palette,
-colour by anatomy or region, labels (vertebrae, rib numbers), a hover readout, PNG export and a copy of the style
-settings as JSON. The repository is code only: every image is generated.
+The Skeleton tab is built around one workflow: view the character → choose an angle → pick or adjust a movement → play it → export.
+
+- **Preview first.** The preview takes most of the window. Above it: Front, ¾, Side, Back and ¾ back, a Right / Left switch for the side of the body facing the camera, a small top-down compass, and zoom (Fit, −, +). Fit always fits the whole frame, below 1× when needed (crisp whole-number zoom from 1× up). Below it: Play / Pause (Space) and Reset pose.
+- **Movement.** Presets first. *Adjust pose* (collapsed) has Neck, Upper back, Lower back and Clavicles, each with plain controls (Bend forward / back, Bend sideways, Twist; Raise / lower, Forward / back, Roll back) and the angle beside each. Clavicles move together unless unlinked. The pelvis (sacrum) sits in an advanced subsection and stays fixed by default.
+- **Visibility** (collapsed): spine, rib cage, clavicles, anatomical labels, centre guides, diagnostic colouring. Labels and guides start off.
+- **Appearance** (collapsed): palette presets and custom colours, background, pixel detail (mm per pixel, independent of zoom), lighting, pixel rules, style JSON, and *Reset appearance*, which resets only these.
+- **Technical details** (collapsed): range-of-motion envelopes, rib-cage response, segment angles, how movement works.
+- **Export:** *Artwork PNG* is the clean sprite (transparent, palette colours, 1 px per pixel, no labels, guides or diagnostic colours). *Preview PNG* is exactly what the preview shows, at 2×.
+- **Narrow screens:** the preview comes first and stays pinned while the settings scroll below it.
+
+The repository is code only: every image is generated.
 
 ## Subject and anatomy
 

@@ -8,14 +8,16 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-/* Layout: one environment for every build level. Level stepper on top, controls rail on the left,
-   the square pixel frame on the right, status bar below. Single dark world: sprites are judged on a neutral workspace. */
+/* Layout: header (title, three tabs, Export) over a workspace where the preview dominates. The preview column holds
+   the view toolbar, the fitted canvas and the playback bar; the panel on the right holds movement first, then
+   collapsed sections for occasional settings. On narrow screens the preview comes first and the panel follows. */
 :root {
-  --bg: #15181c; --panel: #1d2126; --raise: #272c33; --line: #333941;
+  --bg: #15181c; --panel: #1d2126; --raise: #272c33; --line: #333941; --line2: #424a54;
   --ink: #e7e2d6; --muted: #8f969e; --accent: #7cc4d8; --accent-ink: #0e1a1f;
   --f-display: "Pixelify Sans", "Courier New", monospace;
   --f-body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --f-mono: "IBM Plex Mono", ui-monospace, Menlo, Consolas, monospace;
+  --tap: 36px;
   color-scheme: dark;
 }
 * { box-sizing: border-box; }
@@ -24,194 +26,259 @@ body { background: var(--bg); color: var(--ink); font-family: var(--f-body); fon
 button, input, select { font: inherit; color: inherit; }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .mono { font-family: var(--f-mono); font-variant-numeric: tabular-nums; }
+[hidden] { display: none !important; }
 
-.app { height: 100%; display: grid; grid-template-columns: 296px minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr) auto; }
-header { grid-column: 1 / -1; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--panel); }
-h1 { font-family: var(--f-display); font-size: 22px; font-weight: 600; margin: 0; }
-header small { color: var(--muted); }
+.app { height: 100%; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+header { display: flex; align-items: center; gap: 18px; padding: 0 14px; border-bottom: 1px solid var(--line); background: var(--panel); min-height: 52px; flex-wrap: wrap; }
+h1 { font-family: var(--f-display); font-size: 19px; font-weight: 600; margin: 0; white-space: nowrap; }
+.tabs { display: flex; align-self: stretch; }
+.tabs button { border: 0; background: transparent; padding: 0 16px; cursor: pointer; color: var(--muted); font-weight: 500; position: relative; min-height: 52px; }
+.tabs button:hover { color: var(--ink); }
+.tabs button[aria-selected="true"] { color: var(--ink); }
+.tabs button[aria-selected="true"]::after { content: ""; position: absolute; left: 10px; right: 10px; bottom: -1px; height: 2px; background: var(--accent); }
 .spacer { flex: 1; }
-.btn { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 11px; cursor: pointer; }
+.btn { border: 1px solid var(--line2); background: var(--raise); border-radius: 6px; padding: 0 12px; min-height: var(--tap); cursor: pointer; white-space: nowrap; }
 .btn:hover { border-color: var(--muted); }
+.btn:disabled { opacity: 0.45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.small { min-height: 30px; padding: 0 9px; font-size: 12px; }
 
-/* main tabs */
-.levels { grid-column: 1 / -1; display: flex; gap: 0; border-bottom: 1px solid var(--line); background: var(--bg); overflow-x: auto; }
-.levels button { display: grid; gap: 1px; text-align: left; border: 0; border-right: 1px solid var(--line); background: transparent; padding: 9px 18px 8px; cursor: pointer; min-width: 150px; position: relative; }
-.levels button b { font-family: var(--f-display); font-weight: 500; font-size: 15px; }
-.levels button span { color: var(--muted); font-size: 12px; }
-.levels button[aria-selected="true"] { background: var(--panel); }
-.levels button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: var(--accent); }
-.levels button:disabled { cursor: default; opacity: 0.45; }
+/* export menu */
+.menu-wrap { position: relative; }
+.menu { position: absolute; right: 0; top: calc(100% + 6px); width: 320px; background: var(--panel); border: 1px solid var(--line2); border-radius: 8px; padding: 6px; z-index: 20; box-shadow: 0 10px 30px rgba(0,0,0,0.45); }
+.menu button { display: grid; gap: 2px; width: 100%; text-align: left; border: 0; background: transparent; border-radius: 6px; padding: 9px 10px; cursor: pointer; }
+.menu button:hover, .menu button:focus-visible { background: var(--raise); }
+.menu b { font-weight: 600; }
+.menu span { color: var(--muted); font-size: 12px; }
 
-.rail { grid-row: 3 / 5; overflow: auto; border-right: 1px solid var(--line); background: var(--panel); padding-bottom: 18px; }
-.group { padding: 12px 16px; display: grid; gap: 9px; border-bottom: 1px solid var(--line); }
-.group h2 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); display: flex; justify-content: space-between; }
-.group h2 span { text-transform: none; letter-spacing: 0; font-weight: 400; }
-.hint { margin: 0; color: var(--muted); font-size: 12px; }
-.seg { display: flex; flex-wrap: wrap; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.seg button { flex: 1 1 auto; border: 0; background: transparent; padding: 5px 7px; cursor: pointer; white-space: nowrap; }
-.seg button + button { border-left: 1px solid var(--line); }
+/* workspace */
+.work { display: grid; grid-template-columns: minmax(0, 1fr) 340px; min-height: 0; }
+.stage { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; min-height: 0; min-width: 0; }
+.bar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 8px 14px; border-bottom: 1px solid var(--line); }
+.bar.bottom { border-bottom: 0; border-top: 1px solid var(--line); }
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: 7px; overflow: hidden; }
+.seg button { border: 0; background: transparent; padding: 0 12px; min-height: 34px; cursor: pointer; white-space: nowrap; }
+.seg button + button { border-left: 1px solid var(--line2); }
 .seg button:hover { background: var(--raise); }
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.chips { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
-.chips button { border: 1px solid var(--line); background: var(--raise); border-radius: 6px; padding: 6px 4px; cursor: pointer; font-size: 12px; }
-.chips button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
-.chips button:disabled { opacity: 0.35; cursor: default; }
-.bones { grid-template-columns: repeat(6, 1fr); }
-.bones button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
-.range { display: grid; grid-template-columns: 96px minmax(0, 1fr) 54px; align-items: center; gap: 8px; }
-.range label { color: var(--muted); }
-.range output { font-family: var(--f-mono); font-size: 12px; text-align: right; }
-input[type="range"] { width: 100%; accent-color: var(--accent); }
+.seg button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--muted); font-weight: 400; }
+.seg.small button { min-height: 30px; padding: 0 9px; font-size: 12px; }
+.orient { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
+.orient svg { flex: none; }
+.zoom { display: inline-flex; align-items: center; gap: 4px; }
+.zoom output { min-width: 62px; text-align: center; font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+
+.viewport { position: relative; overflow: hidden; display: grid; place-items: center; min-height: 0; padding: 12px; }
+.viewport.scroll { overflow: auto; place-items: start; }
+.frame { position: relative; line-height: 0; }
+canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+canvas.soft { image-rendering: auto; }
+#lbl-layer { position: absolute; inset: 0; pointer-events: none; line-height: 1.2; }
+.lbl { position: absolute; font-family: var(--f-mono); font-size: 11px; color: var(--muted); transform: translateY(-50%); white-space: nowrap; }
+.lbl.l { transform: translate(-100%, -50%); }
+#busy { position: absolute; top: 12px; right: 14px; background: var(--raise); border: 1px solid var(--line); padding: 3px 10px; border-radius: 999px; font-size: 12px; color: var(--accent); z-index: 2; }
+#hover { position: absolute; left: 14px; top: 12px; background: rgba(29,33,38,0.92); border: 1px solid var(--line); padding: 3px 9px; border-radius: 6px; font-size: 12px; z-index: 2; pointer-events: none; }
+.pose-name { color: var(--muted); }
+.pose-name b { color: var(--ink); font-weight: 500; }
+
+/* panel */
+.panel { border-left: 1px solid var(--line); background: var(--panel); overflow-y: auto; min-height: 0; }
+.sec { border-bottom: 1px solid var(--line); }
+.sec > h2, .sec > summary { margin: 0; padding: 12px 16px; font-size: 11px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.sec > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; min-height: 44px; }
+.sec > summary::-webkit-details-marker { display: none; }
+.sec > summary::after { content: "+"; font-size: 16px; letter-spacing: 0; color: var(--muted); }
+.sec[open] > summary::after { content: "–"; }
+.sec > summary:hover { color: var(--ink); }
+.body { padding: 0 16px 14px; display: grid; gap: 10px; }
+.sub { font-size: 12px; font-weight: 600; color: var(--ink); margin: 4px 0 0; }
+.hint { margin: 0; color: var(--muted); font-size: 12px; }
+.presets { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; }
+.presets button { border: 1px solid var(--line2); background: var(--raise); border-radius: 6px; min-height: var(--tap); cursor: pointer; padding: 4px 8px; text-align: left; }
+.presets button:hover { border-color: var(--muted); }
+.presets button[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+details.inner { border: 1px solid var(--line); border-radius: 8px; }
+details.inner > summary { cursor: pointer; padding: 9px 12px; font-weight: 500; min-height: 38px; display: flex; align-items: center; justify-content: space-between; list-style: none; }
+details.inner > summary::-webkit-details-marker { display: none; }
+details.inner > summary::after { content: "▸"; color: var(--muted); }
+details.inner[open] > summary::after { content: "▾"; }
+details.inner > div { padding: 2px 12px 12px; display: grid; gap: 10px; }
+details.adv > summary { font-size: 12px; color: var(--muted); }
+.slider { display: grid; gap: 2px; }
+.slider .top { display: flex; justify-content: space-between; align-items: baseline; }
+.slider .top output { font-family: var(--f-mono); font-size: 12px; color: var(--muted); }
+.slider .ends { display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); min-height: 24px; margin: 0; }
 input[type="range"]:disabled { opacity: 0.4; }
-.check { display: flex; align-items: center; gap: 8px; cursor: pointer; }
-.check input { accent-color: var(--accent); margin: 0; }
-select { background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 5px 8px; }
+.check { display: flex; align-items: center; gap: 9px; cursor: pointer; min-height: 30px; }
+.check input { accent-color: var(--accent); margin: 0; width: 16px; height: 16px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+select { background: var(--raise); border: 1px solid var(--line2); border-radius: 6px; padding: 0 8px; min-height: 32px; }
 .pal { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
 .pal label { display: grid; gap: 2px; justify-items: center; font-size: 10px; color: var(--muted); cursor: pointer; }
-.pal input { width: 100%; height: 22px; padding: 0; border: 1px solid var(--line); border-radius: 4px; background: none; cursor: pointer; }
+.pal input { width: 100%; height: 24px; padding: 0; border: 1px solid var(--line2); border-radius: 4px; background: none; cursor: pointer; }
 .legend { display: grid; grid-template-columns: 1fr 1fr; gap: 3px 10px; color: var(--muted); font-size: 12px; }
 .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
-.legend[hidden] { display: none; }
-[data-level="1"] .only2, [data-level="2"] .only1 { display: none; }
-[data-tab="body"] .skel, [data-tab="clothing"] .skel { display: none; }
-[data-tab="skeleton"] .empty { display: none; }
-.empty { max-width: 460px; margin: 60px auto; padding: 22px 24px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
-.empty b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
-.sub-h { font-size: 12px; color: var(--muted); margin-top: 2px; }
-.ribs { grid-template-columns: repeat(6, 1fr); }
-.ribs button { padding: 4px 0; font-family: var(--f-mono); font-size: 11px; }
-#ribcage-state { font-size: 12px; color: var(--muted); margin: 0; }
-.stack { display: grid; gap: 6px; }
-
-.row { display: flex; gap: 6px; flex-wrap: wrap; }
-.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
-.region-h { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; margin-top: 4px; }
-.region-h span { font-weight: 400; color: var(--muted); font-family: var(--f-mono); }
-.range.pose { grid-template-columns: 74px minmax(0, 1fr) 54px; }
-details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-#seg-table { max-height: 260px; overflow: auto; margin-top: 6px; }
+.kv { display: grid; grid-template-columns: auto 1fr; gap: 3px 12px; font-size: 12px; }
+.kv dt { color: var(--muted); } .kv dd { margin: 0; font-family: var(--f-mono); text-align: right; }
+#seg-table { max-height: 260px; overflow: auto; }
 #seg-table table { width: 100%; border-collapse: collapse; font-family: var(--f-mono); font-size: 11px; font-variant-numeric: tabular-nums; }
 #seg-table td, #seg-table th { padding: 1px 4px; text-align: right; border-bottom: 1px solid var(--line); }
 #seg-table th { color: var(--muted); font-weight: 500; }
 #seg-table td:first-child, #seg-table th:first-child { text-align: left; }
-#seg-table .bar { color: var(--accent); }
-#stage { position: relative; overflow: auto; padding: 20px; min-height: 0; }
-.frame { position: relative; display: inline-block; border: 1px solid var(--line); }
-canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
-#lbl-layer { position: absolute; inset: 0; pointer-events: none; }
-.lbl { position: absolute; font-family: var(--f-mono); font-size: 11px; color: var(--muted); transform: translateY(-50%); white-space: nowrap; }
-.lbl.l { transform: translate(-100%, -50%); }
-#caption { color: var(--muted); font-size: 12px; margin-top: 8px; }
-#busy { position: absolute; top: 12px; right: 16px; background: var(--raise); border: 1px solid var(--line); padding: 4px 10px; border-radius: 999px; font-size: 12px; color: var(--accent); }
-#toast { position: fixed; bottom: 46px; right: 18px; background: var(--raise); border: 1px solid var(--accent); padding: 8px 12px; border-radius: 6px; }
-.statusbar { border-top: 1px solid var(--line); background: var(--panel); padding: 7px 16px; min-height: 34px; }
-#status { font-family: var(--f-mono); font-size: 12px; color: var(--muted); overflow-wrap: anywhere; }
-@media (max-width: 800px) {
-  .app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto minmax(70vh, 1fr) auto; height: auto; min-height: 100%; }
-  .rail { grid-row: auto; border-right: 0; border-bottom: 1px solid var(--line); }
+.notes { margin: 0; padding-left: 16px; color: var(--muted); font-size: 12px; display: grid; gap: 4px; }
+
+.empty { margin: auto; max-width: 420px; padding: 22px 24px; border: 1px dashed var(--line2); border-radius: 8px; color: var(--muted); }
+.empty b { display: block; font-family: var(--f-display); font-size: 18px; font-weight: 500; color: var(--ink); margin-bottom: 6px; }
+.emptywrap { display: grid; place-items: center; padding: 24px; }
+#toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--raise); border: 1px solid var(--accent); padding: 8px 14px; border-radius: 6px; z-index: 30; }
+
+@media (max-width: 900px) {
+  .app { height: auto; min-height: 100%; }
+  header { padding: 0 10px; gap: 8px; }
+  h1 { font-size: 16px; }
+  .tabs button { padding: 0 11px; }
+  .work { grid-template-columns: minmax(0, 1fr); }
+  .stage { grid-template-rows: auto auto auto; position: sticky; top: 0; z-index: 5; background: var(--bg); border-bottom: 1px solid var(--line); }
+  .viewport { height: min(52vh, 92vw + 24px); }
+  .panel { border-left: 0; border-top: 1px solid var(--line); overflow: visible; }
+  .bar { padding: 8px 10px; gap: 8px; }
+  :root { --tap: 40px; }
+  .seg button { min-height: 38px; }
 }
 </style>
 </head>
 <body>
-<div class="app" id="app" data-tab="skeleton" data-level="2">
+<div class="app" id="app" data-tab="skeleton">
   <header>
-    <h1>Pixel Character Lab</h1><small>Adult female, 183 cm, 78 kg · one 3D model, rendered to pixel art in the browser</small>
+    <h1>Pixel Character Lab</h1>
+    <nav class="tabs" id="tabs" role="tablist" aria-label="Character layer"></nav>
     <div class="spacer"></div>
-    <button class="btn skel" type="button" id="save">Save PNG</button>
-    <button class="btn skel" type="button" id="copy">Copy style JSON</button>
+    <div class="menu-wrap" id="export-wrap">
+      <button class="btn primary" type="button" id="export" aria-haspopup="menu" aria-expanded="false">Export</button>
+      <div class="menu" id="export-menu" role="menu" hidden>
+        <button type="button" role="menuitem" id="exp-art"><b>Artwork PNG</b><span>Clean sprite: transparent background, palette colours, 1 px per pixel. Diagnostic colours, labels and guides are left out.</span></button>
+        <button type="button" role="menuitem" id="exp-view"><b>Preview PNG (as shown)</b><span id="exp-view-note">Exactly what the preview shows: background, colours, labels and guides, at 2× so labels stay readable.</span></button>
+      </div>
+    </div>
   </header>
-  <nav class="levels" id="tabs" role="tablist" aria-label="Character"></nav>
 
-  <aside class="rail" aria-label="Controls">
-    <section class="group skel">
-      <h2>Skeleton</h2>
-      <div class="seg" id="mode" role="group" aria-label="Show"></div>
-      <div class="only2 stack">
-        <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine (vertebrae, discs, sacrum, coccyx)</label>
-        <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage (12 rib pairs, costal cartilages, sternum)</label>
-        <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+  <div class="work" id="work">
+    <section class="stage" aria-label="Preview">
+      <div class="bar" role="toolbar" aria-label="View">
+        <div class="seg" id="angle" role="group" aria-label="Camera angle"></div>
+        <div class="seg small" id="side" role="group" aria-label="Side of the body facing the camera"></div>
+        <div class="orient" id="orient"></div>
+        <div class="spacer"></div>
+        <div class="zoom" role="group" aria-label="Zoom">
+          <button class="btn small" type="button" id="zoom-out" aria-label="Zoom out">−</button>
+          <output id="zoom-out-val" aria-live="polite"></output>
+          <button class="btn small" type="button" id="zoom-in" aria-label="Zoom in">+</button>
+          <button class="btn small" type="button" id="zoom-fit" aria-pressed="true">Fit</button>
+        </div>
+      </div>
+      <div class="viewport" id="viewport">
+        <div id="busy" hidden></div>
+        <div id="hover" hidden></div>
+        <div class="frame" id="frame"><canvas id="cv" width="96" height="96" role="img" aria-label="Pixel-art skeleton preview"></canvas><div id="lbl-layer"></div></div>
+      </div>
+      <div class="bar bottom" role="toolbar" aria-label="Playback">
+        <button class="btn primary" type="button" id="play" aria-pressed="false">▶ Play</button>
+        <button class="btn" type="button" id="reset-pose">Reset pose</button>
+        <span class="pose-name" id="pose-name"></span>
       </div>
     </section>
-    <section class="group only2 skel" id="pose-group">
-      <h2>Pose <span id="pose-state">neutral</span></h2>
-      <div class="chips" id="demos" role="group" aria-label="Demonstration poses"></div>
-      <div class="row"><button class="btn primary" type="button" id="play">Play</button><button class="btn" type="button" id="to-neutral">Reset to neutral</button></div>
-      <div id="pose-sliders"></div>
-      <label class="check" for="sacrum-fixed"><input type="checkbox" id="sacrum-fixed"> Sacrum fixed (isolated spine)</label>
-      <div id="root-sliders"></div>
-      <details id="seg-details"><summary>Segment angles</summary><div id="seg-table"></div></details>
-      <p class="hint">Regional controls are spread over the motion segments by their measured share. Limits: 85 % of mean active ranges; combined motions share one envelope.</p>
-      <p id="ribcage-state"></p>
-    </section>
-    <section class="group only2 skel">
-      <h2>Clavicles <span>sternoclavicular joint</span></h2>
-      <label class="check" for="clav-link"><input type="checkbox" id="clav-link"> Move both together</label>
-      <div id="clav-sliders"></div>
-      <p class="hint">Each clavicle hangs from the manubrium, never from the spine. Limits: 85 % of textbook ranges; one envelope per side.</p>
-    </section>
-    <section class="group only1 skel">
-      <h2>Bone <span id="bone-name"></span></h2>
-      <div class="sub-h">Spine</div>
-      <div class="chips bones" id="bones" role="group" aria-label="Vertebra"></div>
-      <div class="sub-h">Ribs</div>
-      <div class="seg" id="rib-side" role="group" aria-label="Rib side"></div>
-      <div class="chips ribs" id="ribs" role="group" aria-label="Rib"></div>
-      <div class="sub-h">Sternum and clavicles</div>
-      <div class="chips" id="girdle" role="group" aria-label="Sternum and clavicles"></div>
-      <p class="hint">Any single bone in its own frame. L3 is the approved style study.</p>
-    </section>
-    <section class="group skel">
-      <h2>Camera angle</h2>
-      <div class="chips" id="views" role="group" aria-label="View"></div>
-      <p class="hint">Fixed eye-level angles about one pivot: a point keeps the same screen height in every view.</p>
-    </section>
-    <section class="group skel">
-      <h2>Pixel scale <span>mm per pixel</span></h2>
-      <div class="seg" id="mm" role="group" aria-label="Millimetres per pixel"></div>
-      <h2>Zoom</h2>
-      <div class="seg" id="zoom" role="group" aria-label="Zoom"></div>
-      <h2>Background</h2>
-      <div class="seg" id="bg" role="group" aria-label="Background"></div>
-    </section>
-    <section class="group skel">
-      <h2>Overlays</h2>
-      <label class="check" for="guides"><input type="checkbox" id="guides"> Pivot guides</label>
-      <label class="check only2" for="labels"><input type="checkbox" id="labels"> Labels (vertebrae, rib numbers)</label>
-      <div class="seg" id="colorby" role="group" aria-label="Colour by"></div>
-      <div class="legend" id="legend" hidden></div>
-    </section>
-    <section class="group skel">
-      <h2>Light</h2>
-      <div class="range"><label for="lightDir">Direction</label><input type="range" id="lightDir" min="0" max="355" step="1"><output id="lightDir-out"></output></div>
-      <div class="range"><label for="lightFront">Toward viewer</label><input type="range" id="lightFront" min="0" max="85" step="1"><output id="lightFront-out"></output></div>
-      <div class="range"><label for="ambient">Ambient</label><input type="range" id="ambient" min="0" max="0.5" step="0.01"><output id="ambient-out"></output></div>
-      <div class="range"><label for="aoStr">Crevice shadow</label><input type="range" id="aoStr" min="0" max="1.5" step="0.05"><output id="aoStr-out"></output></div>
-      <div class="range"><label for="exposure">Exposure</label><input type="range" id="exposure" min="0.6" max="1.5" step="0.01"><output id="exposure-out"></output></div>
-    </section>
-    <section class="group skel">
-      <h2>Pixel rules</h2>
-      <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
-      <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
-      <div class="range"><label for="gap">Depth jump</label><input type="range" id="gap" min="1" max="10" step="0.5"><output id="gap-out"></output></div>
-      <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
-      <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
-    </section>
-    <section class="group skel">
-      <h2>Palette</h2>
-      <label class="range" for="preset" style="grid-template-columns:96px 1fr"><span style="color:var(--muted)">Bone preset</span><select id="preset"></select></label>
-      <div class="pal" id="pal-bone" aria-label="Bone colours"></div>
-      <h2>Disc and cartilage colours</h2>
-      <div class="pal" id="pal-disc" aria-label="Disc colours"></div>
-      <button class="btn" type="button" id="reset">Reset all settings</button>
-    </section>
-  </aside>
 
-  <main id="stage"><div id="busy" hidden></div>
-    <div class="frame skel"><canvas id="cv" width="96" height="96"></canvas><div id="lbl-layer"></div></div>
-    <div id="caption" class="skel"></div>
-    <div class="empty" role="status"><b>Nothing here yet</b>The body and the clothing are built around the finished skeleton in later stages. This tab keeps their place; no artwork has been made for it.</div>
-  </main>
-  <div class="statusbar"><div id="status"></div></div>
+    <aside class="panel" id="panel" aria-label="Settings">
+      <section class="sec">
+        <h2>Movement</h2>
+        <div class="body">
+          <div class="presets" id="demos" role="group" aria-label="Movement presets"></div>
+          <details class="inner" id="adjust">
+            <summary>Adjust pose</summary>
+            <div>
+              <div class="seg small" id="region" role="group" aria-label="Body region"></div>
+              <div id="region-controls"></div>
+              <details class="inner adv" id="pelvis">
+                <summary>Advanced: pelvis (sacrum)</summary>
+                <div>
+                  <label class="check" for="sacrum-fixed"><input type="checkbox" id="sacrum-fixed"> Keep the sacrum fixed</label>
+                  <div id="root-controls"></div>
+                </div>
+              </details>
+            </div>
+          </details>
+        </div>
+      </section>
+
+      <details class="sec" id="sec-vis">
+        <summary>Visibility</summary>
+        <div class="body">
+          <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine</label>
+          <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage</label>
+          <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+          <label class="check" for="labels"><input type="checkbox" id="labels"> Anatomical labels</label>
+          <label class="check" for="guides"><input type="checkbox" id="guides"> Centre guides</label>
+          <div class="sub">Diagnostic colouring</div>
+          <div class="seg small" id="colorby" role="group" aria-label="Diagnostic colouring"></div>
+          <div class="legend" id="legend" hidden></div>
+        </div>
+      </details>
+
+      <details class="sec" id="sec-look">
+        <summary>Appearance</summary>
+        <div class="body">
+          <div class="sub">Palette</div>
+          <select id="preset" aria-label="Palette preset"></select>
+          <details class="inner adv"><summary>Custom colours</summary><div>
+            <div class="hint">Bone</div><div class="pal" id="pal-bone"></div>
+            <div class="hint">Discs and cartilage</div><div class="pal" id="pal-disc"></div>
+          </div></details>
+          <div class="sub">Background</div>
+          <div class="seg small" id="bg" role="group" aria-label="Background"></div>
+          <div class="sub">Pixel detail</div>
+          <div class="seg small" id="mm" role="group" aria-label="Millimetres per pixel"></div>
+          <div class="hint">Size of one pixel on the character. Display zoom does not change it.</div>
+          <details class="inner adv"><summary>Lighting</summary><div id="light-controls"></div></details>
+          <details class="inner adv"><summary>Pixel rules</summary><div>
+            <label class="check" for="outline"><input type="checkbox" id="outline"> 1 px outline</label>
+            <label class="check" for="lines"><input type="checkbox" id="lines"> Interior contour lines</label>
+            <div id="gap-control"></div>
+            <label class="check" for="rim"><input type="checkbox" id="rim"> Rim light on top edges</label>
+            <label class="check" for="clusters"><input type="checkbox" id="clusters"> Clean clusters (no lone pixels)</label>
+          </div></details>
+          <div class="row">
+            <button class="btn small" type="button" id="copy">Copy style JSON</button>
+            <button class="btn small" type="button" id="reset-look">Reset appearance</button>
+          </div>
+          <p class="hint">Reset appearance restores palette, background, pixel detail, lighting and pixel rules. Pose, view and visibility stay as they are.</p>
+        </div>
+      </details>
+
+      <details class="sec" id="sec-tech">
+        <summary>Technical details</summary>
+        <div class="body">
+          <div class="sub">Range-of-motion envelopes</div>
+          <dl class="kv" id="envelopes"></dl>
+          <div class="sub">Rib cage response</div>
+          <dl class="kv" id="ribcage"></dl>
+          <details class="inner adv"><summary>Segment angles</summary><div><div id="seg-table"></div></div></details>
+          <div class="sub">How movement works</div>
+          <ul class="notes">
+            <li>Each region's angle is spread over its motion segments by measured in vivo shares; no single joint takes a region's range.</li>
+            <li>Controls reach 85 % of mean active ranges. Combined motions share one envelope per region, so all axes cannot peak together; every segment is capped.</li>
+            <li>Ribs move with their vertebrae and may turn up to 10° at their costovertebral joints; the sternum settles where the cartilages are disturbed least; cartilages bend and keep their length.</li>
+            <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine; limits are 85 % of textbook ranges with one envelope per side.</li>
+            <li>The sacrum is fixed by default; the pelvis controls rotate it about the hip axis.</li>
+          </ul>
+          <div class="sub">Model</div>
+          <dl class="kv" id="model-info"></dl>
+        </div>
+      </details>
+    </aside>
+  </div>
+
+  <div class="emptywrap" id="empty" hidden><div class="empty" role="status"><b id="empty-title">Nothing here yet</b><span id="empty-text"></span></div></div>
 </div>
 <div id="toast" role="status" hidden></div>
 <script id="core-src">
