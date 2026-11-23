@@ -195,7 +195,7 @@ function stylise(g, model, st0) {
   }
   // separate bones that touch without a depth jump (clavicle on the manubrium, rib head on its vertebra): a joint line,
   // drawn on the farther of the two. Applies to skeletal elements added after the spine; spine-only pairs are unchanged.
-  const THX = { rib: 1, sternum: 1, clavicle: 1 };
+  const THX = { rib: 1, sternum: 1, clavicle: 1, scapula: 1 };
   const joint = (p, q) => { const a = model.els[objOf[p] - 1], b = model.els[objOf[q] - 1];
     return a && b && a !== b && (THX[a.kind] || THX[b.kind]) && a.kind !== "cartilage" && b.kind !== "cartilage" && a.kind !== "disc" && b.kind !== "disc" && depth[q] <= depth[p]; };
   let lab = new Uint8Array(n);

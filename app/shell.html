@@ -63,6 +63,8 @@ h1 { font-family: var(--f-display); font-size: 19px; font-weight: 600; margin: 0
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .seg button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--muted); font-weight: 400; }
 .seg.small button { min-height: 30px; padding: 0 9px; font-size: 12px; }
+#region { display: grid; grid-template-columns: repeat(4, 1fr); }
+#region button { padding: 0 4px; }
 .orient { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .orient svg { flex: none; }
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
@@ -216,7 +218,7 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
         <div class="body">
           <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine</label>
           <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage</label>
-          <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+          <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Shoulder girdle (clavicles, scapulae)</label>
           <label class="check" for="labels"><input type="checkbox" id="labels"> Anatomical labels</label>
           <label class="check" for="guides"><input type="checkbox" id="guides"> Centre guides</label>
           <div class="sub">Diagnostic colouring</div>
@@ -262,13 +264,16 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
           <dl class="kv" id="envelopes"></dl>
           <div class="sub">Rib cage response</div>
           <dl class="kv" id="ribcage"></dl>
+          <div class="sub">Shoulder girdle (left / right)</div>
+          <dl class="kv" id="girdle"></dl>
           <details class="inner adv"><summary>Segment angles</summary><div><div id="seg-table"></div></div></details>
           <div class="sub">How movement works</div>
           <ul class="notes">
             <li>Each region's angle is spread over its motion segments by measured in vivo shares; no single joint takes a region's range.</li>
             <li>Controls reach 85 % of mean active ranges. Combined motions share one envelope per region, so all axes cannot peak together; every segment is capped.</li>
             <li>Ribs move with their vertebrae and may turn up to 10° at their costovertebral joints; the sternum settles where the cartilages are disturbed least; cartilages bend and keep their length.</li>
-            <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine; limits are 85 % of textbook ranges with one envelope per side.</li>
+            <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine. Each scapula hangs from its clavicle at the acromioclavicular joint and glides over the rib cage at a soft-tissue distance; it has no bony joint with the ribs or spine.</li>
+            <li>Shoulder controls: raise / lower and forward / back move the clavicle (85 % of sternoclavicular ranges); upward rotation turns the scapula (85 % of the isolated, arm-free range). The clavicle's axial rotation and the scapula's tilt and internal rotation are solved so the scapula stays on the rib cage. One envelope per side.</li>
             <li>The sacrum is fixed by default; the pelvis controls rotate it about the hip axis.</li>
           </ul>
           <div class="sub">Model</div>
@@ -292,6 +297,9 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
 </script>
 <script id="thorax-src">
 /*THORAX*/
+</script>
+<script id="shoulder-src">
+/*SHOULDER*/
 </script>
 <script id="thorax-rig-src">
 /*THORAXRIG*/

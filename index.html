@@ -63,6 +63,8 @@ h1 { font-family: var(--f-display); font-size: 19px; font-weight: 600; margin: 0
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .seg button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--muted); font-weight: 400; }
 .seg.small button { min-height: 30px; padding: 0 9px; font-size: 12px; }
+#region { display: grid; grid-template-columns: repeat(4, 1fr); }
+#region button { padding: 0 4px; }
 .orient { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .orient svg { flex: none; }
 .zoom { display: inline-flex; align-items: center; gap: 4px; }
@@ -216,7 +218,7 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
         <div class="body">
           <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine</label>
           <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage</label>
-          <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Clavicles</label>
+          <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Shoulder girdle (clavicles, scapulae)</label>
           <label class="check" for="labels"><input type="checkbox" id="labels"> Anatomical labels</label>
           <label class="check" for="guides"><input type="checkbox" id="guides"> Centre guides</label>
           <div class="sub">Diagnostic colouring</div>
@@ -262,13 +264,16 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
           <dl class="kv" id="envelopes"></dl>
           <div class="sub">Rib cage response</div>
           <dl class="kv" id="ribcage"></dl>
+          <div class="sub">Shoulder girdle (left / right)</div>
+          <dl class="kv" id="girdle"></dl>
           <details class="inner adv"><summary>Segment angles</summary><div><div id="seg-table"></div></div></details>
           <div class="sub">How movement works</div>
           <ul class="notes">
             <li>Each region's angle is spread over its motion segments by measured in vivo shares; no single joint takes a region's range.</li>
             <li>Controls reach 85 % of mean active ranges. Combined motions share one envelope per region, so all axes cannot peak together; every segment is capped.</li>
             <li>Ribs move with their vertebrae and may turn up to 10° at their costovertebral joints; the sternum settles where the cartilages are disturbed least; cartilages bend and keep their length.</li>
-            <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine; limits are 85 % of textbook ranges with one envelope per side.</li>
+            <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine. Each scapula hangs from its clavicle at the acromioclavicular joint and glides over the rib cage at a soft-tissue distance; it has no bony joint with the ribs or spine.</li>
+            <li>Shoulder controls: raise / lower and forward / back move the clavicle (85 % of sternoclavicular ranges); upward rotation turns the scapula (85 % of the isolated, arm-free range). The clavicle's axial rotation and the scapula's tilt and internal rotation are solved so the scapula stays on the rib cage. One envelope per side.</li>
             <li>The sacrum is fixed by default; the pelvis controls rotate it about the hip axis.</li>
           </ul>
           <div class="sub">Model</div>
@@ -955,6 +960,9 @@ const REFS = {
   whitePanjabi: "White & Panjabi 1990, Clinical Biomechanics of the Spine: representative (largely cadaveric) segmental ranges; used only as a passive upper reference.",
   neumann: "Neumann, Kinesiology of the Musculoskeletal System (3rd ed.): sternoclavicular joint ranges ≈ 45° elevation, 10° depression, 15–20° protraction, 15–30° retraction, 20–35° posterior rotation.",
   ludewig09: "Ludewig et al. 2009, J Bone Joint Surg Am 91(2): in vivo bone-pin kinematics; resting clavicle ≈ 20° retracted and ≈ 6° elevated; with arm elevation it retracts 15–30°, elevates ≈ 10° and rotates posteriorly ≈ 30°.",
+  mcclure01: "McClure et al. 2001, J Shoulder Elbow Surg 10(3): bone-pin 3D scapular kinematics in vivo (8 volunteers). Scapular upward rotation, posterior tilt and external rotation increase with arm elevation; maximum upward rotation ≈ 50° (original ISB axes).",
+  ludewig10: "Ludewig et al. 2010, J Biomech 43(8): ISB scapular axes compared; maximum upward rotation 43 ± 8° (current standard) at maximum arm elevation.",
+  jsesi23: "Cadaveric isolated scapulothoracic motions (JSES International 2023): shrug elevates the clavicle ≈ 25° with ≈ 26° scapular lateral (upward) rotation and ≈ 3° anterior tilt; protraction ≈ +7°, retraction and shrug reduce protraction.",
   wilke17: "Wilke et al. 2017, PLoS One (PMC5453693): in vitro thoracic segments with vs without the rib cage; the rib cage stiffens the segments, most in axial rotation (more than half the range). In vivo values above already include the intact rib cage.",
 };
 
@@ -1012,10 +1020,18 @@ const SETTINGS = {
 };
 // Sternoclavicular joint: clavicle relative to the manubrium, degrees from the resting position (one direction).
 // Controls reach SETTINGS.conservative of these. Anterior rotation is not modelled (posterior rotation returns to 0).
+// Scapulothoracic gliding (scapula relative to the thorax, on top of the clavicle's motion). Upward rotation is the only
+// independent scapular control; tilt and internal / external rotation are solved so the scapula keeps gliding on the
+// rib cage. Downward rotation below rest is poorly documented in vivo: 10° is an approximation, marked as such.
+// AC joint rotations stay within acRange (bone-pin studies report up to ≈ 15–20° per axis; approximation).
+// Without arms, scapular upward rotation is limited to what the girdle reaches on its own: ≈ 26° in isolated shrugging
+// (jsesi23). The 43–50° reached with full arm elevation (ludewig10, mcclure01) is kept as withArm for the arm stage.
+const ST = { upwardRotation: 26, withArm: 45, downwardRotation: 10, acRange: 25, softTissueMin: 5,
+  refs: ["jsesi23", "ludewig10", "mcclure01", "ludewig09"], approx: "isolated upward rotation from cadaveric shrugging; downward rotation (10°) and AC range (25°) approximate" };
 const SC = { elevation: 45, depression: 10, protraction: 17.5, retraction: 22.5, posteriorRotation: 27.5,
   refs: ["neumann", "ludewig09"], approx: "textbook (largely passive) ranges; mid-points where a range is given" };
 
-const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS, SC };
+const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS, SC, ST };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.SpineROM = API;
 })(typeof self !== "undefined" ? self : this);
@@ -1718,6 +1734,334 @@ else root.ThoraxCore = API;
 })(typeof self !== "undefined" ? self : this);
 
 </script>
+<script id="shoulder-src">
+// Shoulder core: both scapulae, placed on the approved thorax and joined to the clavicles at the acromioclavicular joint.
+// Units: mm. Character space as everywhere: x = subject's left, y = up (floor 0), z = anterior.
+// Each scapula has its own local frame (u lateral along the spine of the scapula, v up in the scapular plane,
+// w anterior = toward the ribs), origin at the acromioclavicular (AC) joint centre. Rest orientation R maps local to
+// world. The right scapula is the exact mirror of the left. Stable IDs: SCAP_L, SCAP_R.
+(function (root) {
+"use strict";
+const NODE = typeof module !== "undefined" && module.exports;
+const C = NODE ? require("./spine-core.js") : root.SpineCore;
+const Th = NODE ? require("./thorax-core.js") : root.ThoraxCore;
+const DEG = Math.PI / 180;
+
+// ---------- vectors / matrices ----------
+const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+const mul = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+const len = (a) => Math.hypot(a[0], a[1], a[2]);
+const nrm = (a) => { const l = len(a) || 1; return [a[0] / l, a[1] / l, a[2] / l]; };
+const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+const lerp = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const mm = (A, B) => A.map((r) => [0, 1, 2].map((j) => r[0] * B[0][j] + r[1] * B[1][j] + r[2] * B[2][j]));
+const mv = (A, v) => [0, 1, 2].map((i) => A[i][0] * v[0] + A[i][1] * v[1] + A[i][2] * v[2]);
+const tr = (A) => [0, 1, 2].map((i) => [A[0][i], A[1][i], A[2][i]]);
+const rotA = (k, a) => { const c = Math.cos(a), s = Math.sin(a), v = 1 - c, [x, y, z] = k;
+  return [[c + x * x * v, x * y * v - z * s, x * z * v + y * s], [y * x * v + z * s, c + y * y * v, y * z * v - x * s], [z * x * v - y * s, z * y * v + x * s, c + z * z * v]]; };
+const rx = (a) => rotA([1, 0, 0], a), ry = (a) => rotA([0, 1, 0], a), rz = (a) => rotA([0, 0, 1], a);
+const MIR = [[-1, 0, 0], [0, 1, 0], [0, 0, 1]];
+
+// ---------- parts (continue the skeleton's numbering) ----------
+const P = { SUBSCAPULAR: 31, SUPRASPINOUS: 32, INFRASPINOUS: 33, SPINE: 34, ACROMION: 35, CORACOID: 36, GLENOID: 37,
+  MEDIAL_BORDER: 38, LATERAL_BORDER: 39, SUPERIOR_BORDER: 40, SUPERIOR_ANGLE: 41, INFERIOR_ANGLE: 42 };
+Object.assign(C.PART_NAMES, { 31: "Subscapular fossa (anterior, costal surface)", 32: "Supraspinous fossa (posterior surface)", 33: "Infraspinous fossa (posterior surface)",
+  34: "Spine of scapula", 35: "Acromion", 36: "Coracoid process", 37: "Glenoid cavity", 38: "Medial border", 39: "Lateral border", 40: "Superior border",
+  41: "Superior angle", 42: "Inferior angle" });
+
+// ------------------------------------------------------------------------------------------
+// 1. Reference data. Female adult scapulae (dry bone / CT), scaled toward 183 cm:
+//    superior-to-inferior angle 140.6 mm (female mean, Folia Morphol 2008) → 148 mm here;
+//    width (medial border at the spine root to the glenoid) ≈ 95 mm (Turkish CT 2025: 95.1 ± 8.1);
+//    spine of scapula to the acromion tip ≈ 128–134 mm; acromion ≈ 44 × 23 × 8 mm; coracoid ≈ 41 mm;
+//    glenoid 34.8 × 26.2 mm (female, BMC MSD 2017) → 36 × 27 mm, inclination ≈ 12° up, version ≈ −1°;
+//    inferior angle ≈ 41°, superior angle ≈ 84°.
+//    Resting orientation on the thorax ≈ 35–41° internal rotation, a few degrees of upward rotation, ≈ 10° anterior
+//    tilt (Ludewig et al.; PLoS One 2019 summary). Superior angle at about T2, inferior angle at the T7 spinous process
+//    (≈ T8 body), medial border 5–7.5 cm from the spinous processes.
+// ------------------------------------------------------------------------------------------
+// Landmarks of the LEFT scapula in a construction frame: origin at the trigonum spinae (TS, root of the spine on the
+// medial border); u lateral, v up, wp POSTERIOR (converted to w = −wp, anterior, below).
+const WIDTH = 1.1;                                   // construction coordinates below are scaled laterally to the female width for 183 cm
+const L3 = (u, v, wp) => [u * WIDTH, v, -wp];
+const LM = {
+  TS: L3(0, 0, 0), SA: L3(7, 46, 0), AI: L3(12, -102, 0),
+  notch: L3(58, 36, 0), corBase: L3(75, 31, -3), corKnee: L3(79, 45, -9), corTip: L3(91, 45, -40),
+  LAtop: L3(83, 22, -1), IGT: L3(85, -11, -2), GF: L3(93, 9, -4),
+  AA: L3(102, 31, 22), acTip: L3(106, 57, -24), facet: L3(94, 52, -15),
+};
+const SCAP = { height: 148, gapTarget: 10, restIR: 35, restUR: 4, restTilt: 10, glenoid: { h: 36, w: 27, depth: 2.6, incl: 12, version: -1 } };
+
+// ---------- primitives (construction frame) ----------
+function udTri(p, a, b, c) {      // unsigned distance to a triangle (Inigo Quilez)
+  const ba = sub(b, a), pa = sub(p, a), cb = sub(c, b), pb = sub(p, b), ac = sub(a, c), pc = sub(p, c), n = cross(ba, ac);
+  const sgn = (x) => (x > 0 ? 1 : x < 0 ? -1 : 0), d2 = (v) => dot(v, v), cl = (x) => Math.max(0, Math.min(1, x));
+  if (sgn(dot(cross(ba, n), pa)) + sgn(dot(cross(cb, n), pb)) + sgn(dot(cross(ac, n), pc)) < 2)
+    return Math.sqrt(Math.min(d2(sub(mul(ba, cl(dot(ba, pa) / d2(ba))), pa)), d2(sub(mul(cb, cl(dot(cb, pb) / d2(cb))), pb)), d2(sub(mul(ac, cl(dot(ac, pc) / d2(ac))), pc))));
+  return Math.sqrt(dot(n, pa) * dot(n, pa) / d2(n));
+}
+let GROUP = 0;
+function plate(fan, ring, half, part) {    // triangle fan with thickness (blade, spine fin, acromion): one primitive per triangle
+  const g = ++GROUP, out = [];
+  for (let i = 0; i < ring.length - 1; i++) {
+    const t = [fan, ring[i], ring[i + 1]], c = mul(add(add(t[0], t[1]), t[2]), 1 / 3);
+    let n = nrm(cross(sub(t[1], t[0]), sub(t[2], t[0]))); if (n[2] < 0) n = mul(n, -1);      // normal toward +w (anterior)
+    out.push({ c, R: Math.max(...t.map((p) => len(sub(p, c)))) + half + 1, part, group: g, t, n, half,
+      d(p) { return udTri(p, t[0], t[1], t[2]) - half; }, side(p) { return dot(sub(p, t[0]), n); } });
+  }
+  return out;
+}
+// The blade: a smooth slab over the outline polygon (u, v). Its mid-surface bulges a little posteriorly over the
+// infraspinous fossa and dips into the supraspinous fossa, so the posterior surface catches the light like bone.
+function bladePrim(outline, half) {
+  const poly = outline.map((p) => [p[0], p[1]]), n = poly.length;
+  // w of the mid-surface (w = anterior): the infraspinous and supraspinous fossae are shallow dishes on the posterior
+  // surface; the whole blade curves gently forward toward its lateral part, following the rib cage
+  const mid = (u, v) => 6.5 * Math.exp(-(((u - 48) / 26) ** 2) - (((v + 30) / 30) ** 2)) + 5.5 * Math.exp(-(((u - 38) / 20) ** 2) - (((v - 28) / 10) ** 2))
+    - 3.5 * Math.exp(-(((u - 30) / 22) ** 2) - (((v + 85) / 18) ** 2)) + 0.00055 * (u - 20) * (u - 20);
+  const d2 = (u, v) => {
+    let d = 1e9, sgn = 1;
+    for (let i = 0, j = n - 1; i < n; j = i++) {
+      const a = poly[j], b = poly[i], ex = b[0] - a[0], ey = b[1] - a[1], wx = u - a[0], wy = v - a[1];
+      const t = Math.max(0, Math.min(1, (wx * ex + wy * ey) / (ex * ex + ey * ey))), dx = wx - ex * t, dy = wy - ey * t;
+      d = Math.min(d, dx * dx + dy * dy);
+      const c1 = v >= a[1], c2 = v < b[1], c3 = ex * wy > ey * wx;
+      if ((c1 && c2 && c3) || (!c1 && !c2 && !c3)) sgn = -sgn;
+    }
+    return sgn * Math.sqrt(d);
+  };
+  const c = [poly.reduce((a, p) => a + p[0], 0) / n, poly.reduce((a, p) => a + p[1], 0) / n, 0];
+  return { c, R: Math.max(...poly.map((p) => Math.hypot(p[0] - c[0], p[1] - c[1]))) + 8, part: P.INFRASPINOUS, isBlade: true,
+    d(p) { const a = d2(p[0], p[1]), b = Math.abs(p[2] - mid(p[0], p[1])) - half; return a > 0 && b > 0 ? Math.hypot(a, b) : Math.max(a, b); },
+    side(p) { return p[2] - mid(p[0], p[1]); } };
+}
+function capsule(a, b, ra, rb, part) {
+  const ab = sub(b, a), L2 = dot(ab, ab);
+  return { c: lerp(a, b, 0.5), R: Math.sqrt(L2) / 2 + Math.max(ra, rb) + 1, part, d(p) {
+    const h = Math.max(0, Math.min(1, dot(sub(p, a), ab) / L2)); return len(sub(p, add(a, mul(ab, h)))) - (ra + (rb - ra) * h); } };
+}
+function chain(pts, rs, part) { const out = []; for (let i = 0; i < pts.length - 1; i++) out.push(capsule(pts[i], pts[i + 1], rs[i], rs[i + 1], part)); return out; }
+function ellO(c, axes, r, part) {      // oriented ellipsoid: axes = 3 unit vectors, r = radii along them
+  return { c, R: Math.max(...r) + 1, part, d(p) {
+    const q = sub(p, c), x = dot(q, axes[0]) / r[0], y = dot(q, axes[1]) / r[1], z = dot(q, axes[2]) / r[2];
+    const k0 = Math.sqrt(x * x + y * y + z * z), k1 = Math.sqrt((x / r[0]) ** 2 + (y / r[1]) ** 2 + (z / r[2]) ** 2);
+    return k0 * (k0 - 1) / Math.max(k1, 1e-6); } };
+}
+function smin(a, b, k) { const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k)); return b * (1 - h) + a * h - k * h * (1 - h); }
+
+// The left scapula's primitives in the construction frame
+function scapulaPrims() {
+  const { TS, SA, AI, notch, corBase, corKnee, corTip, LAtop, IGT, GF, AA, acTip, facet } = LM;
+  // blade: thin plate, gently concave toward the ribs (centre bulges posteriorly)
+  const blade = [bladePrim([SA, L3(32, 42, 0), notch, L3(70, 32, 0), LAtop, L3(84, 2, 0), IGT, L3(66, -40, 0), L3(40, -75, 0), AI, L3(4, -50, 0), TS, L3(2, 24, 0)], 1.6)];
+  // spine of the scapula: a fin rising from the dorsal surface, thicker toward its free crest, running up into the acromion
+  const c0 = L3(2, 1, 6), c1 = L3(38, 12, 18), c2 = L3(74, 24, 26), b0 = L3(0, 0, 3), b1 = L3(80, 18, 3);
+  const fin = plate(L3(40, 12, 8), [b0, c0, c1, c2, b1, b0], 3.4, P.SPINE);
+  const crest = chain([c0, c1, c2, L3(90, 30, 25), AA], [3.4, 5.0, 6.0, 6.2, 5.6], P.SPINE);
+  // acromion: flat plate arching over the glenoid; the AC facet is on its anteromedial edge
+  const acr = plate(L3(104, 45, -1), [AA, L3(116, 39, 10), L3(117, 50, -12), acTip, L3(100, 57, -23), facet, L3(88, 45, 6), L3(86, 33, 22), AA], 4.2, P.ACROMION);
+  // coracoid process: ascends from the upper glenoid neck, bends and points forward and out (a bent finger)
+  const cor = [capsule(corBase, corKnee, 6, 5.2, P.CORACOID), capsule(corKnee, L3(86, 46, -24), 5.2, 4.6, P.CORACOID), capsule(L3(86, 46, -24), corTip, 4.6, 3.6, P.CORACOID)];
+  // borders: thin medial, sharp superior, thick lateral (axillary) border
+  const medial = chain([SA, L3(2, 24, 0.5), TS, L3(4, -50, 1), AI], [2.8, 2.6, 2.8, 2.6, 3.6], P.MEDIAL_BORDER);
+  const superior = chain([SA, L3(32, 42, 1), notch, L3(70, 32, 0), corBase], [2.2, 1.7, 1.6, 2.2, 3.5], P.SUPERIOR_BORDER);
+  const lateral = chain([IGT, L3(66, -40, 1), L3(40, -75, 1.5), AI], [5.6, 4.6, 3.8, 3.6], P.LATERAL_BORDER);
+  // glenoid: neck and an oval, pear-shaped articular head; the shallow cavity is subtracted below
+  const g = SCAP.glenoid, n = nrm(mv(mm(rz(g.incl * DEG), ry(-g.version * DEG)), [1, 0, 0])), up = nrm(sub([0, 1, 0], mul(n, n[1]))), ap = cross(n, up);
+  const head = ellO(sub(GF, mul(n, 3)), [n, up, ap], [5, g.h / 2, g.w / 2], P.GLENOID);
+  const headLow = ellO(add(sub(GF, mul(n, 3)), mul(up, -6)), [n, up, ap], [5, g.h * 0.36, g.w * 0.56], P.GLENOID);   // wider below: pear shape
+  const neck = [capsule(L3(72, 8, 1), sub(GF, mul(n, 5)), 9, 8.5, P.LATERAL_BORDER), capsule(L3(78, 18, 0), LAtop, 6, 5, P.SUPERIOR_BORDER)];
+  const cavity = ellO(add(GF, mul(n, 9.2 - g.depth + 2)), [n, up, ap], [9.2, g.h / 2 - 2.2, g.w / 2 - 2], P.GLENOID);
+  const prims = [...blade, ...fin, ...crest, ...acr, ...cor, ...medial, ...superior, ...lateral, head, headLow, ...neck];
+  return { prims, cavity, glenoid: { c: GF, n, up }, spineLine: [b0, b1] };
+}
+
+// ------------------------------------------------------------------------------------------
+// 2. Thoracic gliding surface: the outer surface of the same-side ribs 1–10 blended into one smooth sheet (a soft
+//    minimum of the rib distance fields, which bridges the intercostal spaces). The scapula glides over it at a
+//    soft-tissue distance; it never forms a bony joint with the ribs or the spine. The surface moves with the ribs, so
+//    every spinal pose carries it along.
+// ------------------------------------------------------------------------------------------
+function solve(A, b) {
+  const n = b.length, M = A.map((r, i) => [...r, b[i]]);
+  for (let c = 0; c < n; c++) { let p = c; for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[p][c])) p = r; [M[c], M[p]] = [M[p], M[c]];
+    for (let r = c + 1; r < n; r++) { const f = M[r][c] / M[c][c]; for (let k = c; k <= n; k++) M[r][k] -= f * M[c][k]; } }
+  const x = new Array(n).fill(0); for (let r = n - 1; r >= 0; r--) { let s = M[r][n]; for (let k = r + 1; k < n; k++) s -= M[r][k] * x[k]; x[r] = s / M[r][r]; }
+  return x;
+}
+function smin2(a, b, k) { const h = Math.max(0, Math.min(1, 0.5 + 0.5 * (b - a) / k)); return b * (1 - h) + a * h - k * h * (1 - h); }
+function gliding(thorax, comps) {
+  const ribs = { L: [], R: [] };
+  thorax.els.forEach((el, i) => { if (el.kind === "rib" && el.n <= 10) ribs[el.side].push({ el, comp: (comps && comps[i]) || C.compile(el) }); });
+  // surface distance for a world point q, given each rib's current transform T (world = T.R * rest + T.t)
+  return (side, q, T) => {
+    let d = 1e9;
+    for (const r of ribs[side]) {
+      const t = T && T[r.el.id], w = t ? mv(tr(t.R), sub(q, t.t)) : q, l = sub(w, r.el.o);
+      const b = r.comp.box, bd = Math.hypot(Math.max(b[0] - l[0], 0, l[0] - b[3]), Math.max(b[1] - l[1], 0, l[1] - b[4]), Math.max(b[2] - l[2], 0, l[2] - b[5]));
+      const v = bd > 30 ? bd : r.comp.sdf(l[0], l[1], l[2]);
+      d = d === 1e9 ? v : smin2(d, v, 7);
+    }
+    return d;
+  };
+}
+
+// ------------------------------------------------------------------------------------------
+// 3. Build: rest placement. The AC joint centre sits 1 mm beyond the clavicle's lateral end (approved clavicle, unchanged);
+//    the acromion's facet meets it. The orientation is solved so the medial border (trigonum spinae and inferior angle)
+//    rests on the gliding surface with a soft-tissue gap (serratus anterior and subscapularis), close to the reported
+//    resting angles.
+// ------------------------------------------------------------------------------------------
+// Clinical angles of a LEFT scapula from world landmarks (thorax axes; mirror x first for the right side):
+// internal rotation = scapular axis TS→AA against the frontal plane (horizontal projection), upward rotation = medial
+// border (AI→SA) against vertical within the scapular plane (+ = glenoid up), tilt = medial border against vertical in
+// the plane perpendicular to it (+ = anterior, top forward).
+function angles(TS, AA, SA, AI) {
+  const ir = Math.atan2(AA[2] - TS[2], AA[0] - TS[0]), c = Math.cos(ir), s = Math.sin(ir), mb = sub(SA, AI);
+  return { ir: ir / DEG, ur: Math.atan2(-(mb[0] * c + mb[2] * s), mb[1]) / DEG, tilt: Math.atan2(mb[2] * c - mb[0] * s, mb[1]) / DEG };
+}
+const restR = (ir, ur, tilt) => mm(ry(-ir * DEG), mm(rz(ur * DEG), rx(tilt * DEG)));   // construction frame → world (left)
+function build(spine, thorax) {
+  const shape = scapulaPrims();
+  const clav = thorax.els.find((e) => e.id === "CLAV_L"), g = clav.geo, last = g.nodes[g.nodes.length - 1];
+  const tEnd = nrm(sub(last.p, g.nodes[g.nodes.length - 3].p));
+  const J = add(g.ac, mul(tEnd, Math.min(last.rn, last.rb) + 1.2));                 // AC joint centre (world, rest)
+  // facet normal (construction frame): out of the acromion's anteromedial edge, medially and a little forward
+  const facetN = nrm(L3(-1, 0.15, -0.35));
+  let Fj = add(LM.facet, mul(facetN, 4.0 + 1.2));
+  const glide = gliding(thorax);
+  const ant = (p) => add(p, [0, 0, 1.6]);                                            // anterior (costal) surface of a medial-border point
+  const world = (R, p) => add(J, mv(R, sub(p, Fj)));
+  const resid = (a) => { const R = restR(...a);
+    return [2 * (glide("L", world(R, ant(LM.TS))) - SCAP.gapTarget), 2 * (glide("L", world(R, ant(LM.AI))) - SCAP.gapTarget),
+      ...(() => { const m = angles(world(R, LM.TS), world(R, LM.AA), world(R, LM.SA), world(R, LM.AI));
+        return [0.3 * (m.ir - SCAP.restIR), 0.3 * (m.ur - SCAP.restUR), 0.3 * (m.tilt - SCAP.restTilt)]; })()]; };
+  let a = [SCAP.restIR, SCAP.restUR, SCAP.restTilt];
+  // the AC joint space is set on the real surfaces: clavicle end against the acromion, ~1.5 mm (articular disc)
+  const clavComp = Th.compile(clav), clavEnd = Th.tubeSurface(g.nodes.slice(-4), null, 24);
+  for (let pass = 0; pass < 4; pass++) {
+  for (let it = 0; it < 40; it++) {
+    const r0 = resid(a), Jm = a.map((_, j) => { const ap = a.slice(); ap[j] += 1e-3; return resid(ap).map((v, i) => (v - r0[i]) / 1e-3); });
+    const A = [0, 1, 2].map((p) => [0, 1, 2].map((q) => Jm[p].reduce((s, v, i) => s + v * Jm[q][i], 0) + (p === q ? 1e-4 : 0)));
+    const dx = solve(A, [0, 1, 2].map((p) => -Jm[p].reduce((s, v, i) => s + v * r0[i], 0)));
+    a = a.map((v, i) => v + dx[i]); if (Math.hypot(...dx) < 1e-6) break;
+  }
+  {
+    SHAPE = null; FJ = Fj;
+    const R = restR(...a), sc = compile({ mirror: false }), toL = (w) => mv(tr(R), sub(w, J));
+    let gap = 1e9; for (const w of clavEnd) { const l = toL(w); gap = Math.min(gap, sc.sdf(l[0], l[1], l[2])); }
+    if (Math.abs(gap - 1.5) < 0.1) break;
+    Fj = add(Fj, mul(facetN, 1.5 - gap));
+  }
+  }
+  SHAPE = null; FJ = Fj;
+  const R = restR(...a);
+  // local frame of the element: origin = AC joint centre, axes = construction axes (u lateral, v up, w anterior)
+  const local = (p) => sub(p, Fj);
+  const lm = Object.fromEntries(Object.entries(LM).map(([k, p]) => [k, local(p)]));
+  const els = [];
+  for (const side of ["L", "R"]) {
+    const m = side === "L" ? (p) => p : (p) => [-p[0], p[1], p[2]];
+    const Rs = side === "L" ? R : mm(MIR, mm(R, MIR));
+    els.push({ kind: "scapula", id: `SCAP_${side}`, name: `Scapula ${side === "L" ? "left" : "right"}`, region: "scapula", side, psi: 0,
+      o: m(J), R: Rs, mirror: side === "R", restR: Rs, landmarks: Object.fromEntries(Object.entries(lm).map(([k, p]) => [k, m(p)])),
+      joint: { ac: m(J), parent: `CLAV_${side}`, gliding: "thorax (ellipsoid), not a bony joint" },
+      glenoid: { c: m(local(shape.glenoid.c)), n: side === "L" ? shape.glenoid.n : [-shape.glenoid.n[0], shape.glenoid.n[1], shape.glenoid.n[2]] },
+      restAngles: { internalRotation: a[0], upwardRotation: a[1], anteriorTilt: a[2] } });
+  }
+  return { els, glide, J, restAngles: a, gapTarget: SCAP.gapTarget, Fj, facetN };
+}
+
+// ---------- compile: shape in the element's local frame (origin AC joint; mirrored for the right side) ----------
+// The full field is a smooth union of ~30 primitives. A coarse grid (8 mm cells) in the construction frame caches, for
+// each cell, the field at its centre and the primitives that can matter there, so a ray only evaluates a handful.
+let SHAPE = null, FJ = null, PRIMS = null;
+function shapeCache() {
+  if (SHAPE) return SHAPE;
+  const s = PRIMS || (PRIMS = scapulaPrims()), J0 = FJ || add(LM.facet, mul(nrm(L3(-1, 0.15, -0.35)), 5.2)), prims = s.prims, cav = s.cavity, K = 2.0;
+  const unite = (p, list) => {      // plain minimum inside one plate (its triangles), smooth union between parts
+    const gm = new Map(); let d = 1e9;
+    for (const q of list) { const v = q.d(p); if (q.group) { const o = gm.get(q.group); if (o === undefined || v < o) gm.set(q.group, v); } else d = d === 1e9 ? v : smin(d, v, K); }
+    for (const v of gm.values()) d = d === 1e9 ? v : smin(d, v, K);
+    return d;
+  };
+  const full = (p) => Math.max(unite(p, prims), -cav.d(p));
+  const b = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+  for (const q of prims) for (let i = 0; i < 3; i++) { b[i] = Math.min(b[i], q.c[i] - q.R); b[i + 3] = Math.max(b[i + 3], q.c[i] + q.R); }
+  const cs = 6, n = [0, 1, 2].map((i) => Math.ceil((b[i + 3] - b[i]) / cs)), half = (cs * Math.sqrt(3)) / 2, cells = new Array(n[0] * n[1] * n[2]);
+  for (let i = 0; i < n[0]; i++) for (let j = 0; j < n[1]; j++) for (let k = 0; k < n[2]; k++) {
+    const c = [b[0] + (i + 0.5) * cs, b[1] + (j + 0.5) * cs, b[2] + (k + 0.5) * cs], dc = full(c);
+    const near = dc < half + 6 ? prims.filter((q) => q.d(c) < half + 6 + K) : null;
+    cells[(i * n[1] + j) * n[2] + k] = { dc, near, cav: len(sub(c, cav.c)) - cav.R < half + 2 };
+  }
+  const field = (p) => {
+    const i = Math.floor((p[0] - b[0]) / cs), j = Math.floor((p[1] - b[1]) / cs), k = Math.floor((p[2] - b[2]) / cs);
+    if (i < 0 || j < 0 || k < 0 || i >= n[0] || j >= n[1] || k >= n[2]) {
+      const q = [Math.max(b[0], Math.min(b[3], p[0])), Math.max(b[1], Math.min(b[4], p[1])), Math.max(b[2], Math.min(b[5], p[2]))];
+      return len(sub(p, q)) + 0.5;
+    }
+    const cell = cells[(i * n[1] + j) * n[2] + k];
+    if (!cell.near) return cell.dc - half;                         // far from bone: a safe lower bound
+    const d = unite(p, cell.near);
+    if (d === 1e9) return cell.dc - half;
+    return cell.cav ? Math.max(d, -cav.d(p)) : d;
+  };
+  // chunks for the renderer: tight boxes around the cells that hold bone surface (rays skip the empty rest of the box)
+  const D = 4, chunks = [];
+  for (let a = 0; a < D; a++) for (let bb = 0; bb < D; bb++) for (let c = 0; c < D; c++) {
+    const lo = [a, bb, c].map((v, i) => Math.floor((v * n[i]) / D)), hi = [a, bb, c].map((v, i) => Math.floor(((v + 1) * n[i]) / D));
+    const cb = [1e9, 1e9, 1e9, -1e9, -1e9, -1e9];
+    for (let i = lo[0]; i < hi[0]; i++) for (let j = lo[1]; j < hi[1]; j++) for (let k = lo[2]; k < hi[2]; k++) {
+      if (cells[(i * n[1] + j) * n[2] + k].dc > half + 0.5) continue;
+      const q = [b[0] + i * cs, b[1] + j * cs, b[2] + k * cs];
+      for (let t = 0; t < 3; t++) { cb[t] = Math.min(cb[t], q[t] - 1); cb[t + 3] = Math.max(cb[t + 3], q[t] + cs + 1); }
+    }
+    if (cb[0] < 1e8) chunks.push(cb);
+  }
+  const nearAt = (p) => {
+    const i = Math.floor((p[0] - b[0]) / cs), j = Math.floor((p[1] - b[1]) / cs), k = Math.floor((p[2] - b[2]) / cs);
+    const cell = i >= 0 && j >= 0 && k >= 0 && i < n[0] && j < n[1] && k < n[2] ? cells[(i * n[1] + j) * n[2] + k] : null;
+    return cell && cell.near && cell.near.length ? cell.near : prims;
+  };
+  SHAPE = { s, J0, field, box: b, unite, chunks, nearAt };
+  return SHAPE;
+}
+function compile(el) {
+  const { s, J0, field, box: cb, nearAt } = shapeCache(), sg = el.mirror ? -1 : 1, cav = s.cavity;
+  const toC = (x, y, z) => [sg * x + J0[0], y + J0[1], z + J0[2]];        // element local → construction frame
+  const sdf = (x, y, z) => field(toC(x, y, z));
+  const spineA = s.spineLine[0], spineB = s.spineLine[1], sl = sub(spineB, spineA);
+  const partAt = (x, y, z) => {
+    const p = toC(x, y, z);
+    if (cav.d(p) < 1.2 && len(sub(p, s.glenoid.c)) < 22) return P.GLENOID;
+    let best = 1e9, q = null; for (const pr of nearAt(p)) { const v = pr.d(p); if (v < best) { best = v; q = pr; } }
+    if (!q) return P.INFRASPINOUS;
+    if (q.part === P.MEDIAL_BORDER || q.part === P.SUPERIOR_BORDER || q.part === P.LATERAL_BORDER || q.isBlade) {
+      if (len(sub(p, LM.SA)) < 11) return P.SUPERIOR_ANGLE;
+      if (len(sub(p, LM.AI)) < 13) return P.INFERIOR_ANGLE;
+    }
+    if (q.isBlade) {
+      if (q.side(p) > 0) return P.SUBSCAPULAR;                                     // costal (anterior) surface
+      const above = (p[0] - spineA[0]) * sl[1] - (p[1] - spineA[1]) * sl[0] > 0;   // above the line of the spine
+      return above ? P.SUPRASPINOUS : P.INFRASPINOUS;
+    }
+    return q.part;
+  };
+  const toL = (c) => (sg > 0 ? [c[0] - J0[0], c[1] - J0[1], c[2] - J0[2], c[3] - J0[0], c[4] - J0[1], c[5] - J0[2]]
+    : [-(c[3] - J0[0]), c[1] - J0[1], c[2] - J0[2], -(c[0] - J0[0]), c[4] - J0[1], c[5] - J0[2]]);
+  const box = toL(cb), chunks = shapeCache().chunks.map((c) => ({ box: toL(c), sdf }));
+  return { sdf, partAt, box, chunks };
+}
+C.registerKind && C.registerKind("scapula", compile);
+
+const API = { angles, P, LM, SCAP, build, compile, scapulaPrims, gliding, restR, solve };
+if (NODE) module.exports = API;
+else root.ShoulderCore = API;
+})(typeof self !== "undefined" ? self : this);
+
+</script>
 <script id="thorax-rig-src">
 // Thorax rig: rib cage and clavicles on top of the approved spinal rig (spine-rig is used unchanged).
 //
@@ -1737,6 +2081,7 @@ const NODE = typeof module !== "undefined" && module.exports;
 const C = NODE ? require("./spine-core.js") : root.SpineCore;
 const Th = NODE ? require("./thorax-core.js") : root.ThoraxCore;
 const SR = NODE ? require("./spine-rig.js") : root.SpineRig;
+const Sh = NODE ? require("./shoulder-core.js") : root.ShoulderCore;
 const ROM = NODE ? require("./spine-rom.js") : root.SpineROM;
 const DEG = Math.PI / 180;
 
@@ -1794,8 +2139,8 @@ function solveLin(A, b) {   // Gaussian elimination with partial pivoting
 
 // ---------- skeleton = spine + thorax ----------
 function buildSkeleton() {
-  const spine = C.build(), thorax = Th.build(spine);
-  return { spine, thorax, els: [...spine.els, ...thorax.els], nSpine: spine.els.length };
+  const spine = C.build(), thorax = Th.build(spine), shoulder = Sh.build(spine, thorax);
+  return { spine, thorax, shoulder, els: [...spine.els, ...thorax.els, ...shoulder.els], nSpine: spine.els.length };
 }
 function makeRig(sk) {
   const spineRig = SR.makeRig(sk.spine);
@@ -1811,13 +2156,18 @@ function makeRig(sk) {
     const up = ribs.find((x) => x.side === r.side && x.n === r.n - 1);
     return { id: r.id, up: up.id, f: [0.35, 0.55, 0.75, 1].map((f) => [at(r, f), at(up, f)]) };
   });
-  return { spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
+  const shoulder = makeShoulder(sk, els);
+  return { spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, shoulder, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
     restVec: Object.fromEntries(ccs.map((c) => [c.id, c.restVec])) };
 }
 
-const SC = ROM.SC, K = ROM.SETTINGS.conservative;
-const clavLimits = () => ({ elev: [-SC.depression * K, SC.elevation * K], prot: [-SC.retraction * K, SC.protraction * K], rot: [0, SC.posteriorRotation * K] });
-const ZERO_CLAV = () => ({ L: { elev: 0, prot: 0, rot: 0 }, R: { elev: 0, prot: 0, rot: 0 } });
+const SC = ROM.SC, ST = ROM.ST, K = ROM.SETTINGS.conservative;
+const clavLimits = () => ({ elev: [-SC.depression * K, SC.elevation * K], prot: [-SC.retraction * K, SC.protraction * K], rot: [0, SC.posteriorRotation * K],
+  up: [-ST.downwardRotation * K, ST.upwardRotation * K] });
+// pose.clavicle[side] = { elev, prot, up }: the shoulder-girdle controls of one side. elev / prot drive the clavicle at the
+// sternoclavicular joint; up is scapular upward rotation. The clavicle's axial rotation and the scapula's tilt and
+// internal rotation are solved (rot, if present in older poses, is ignored).
+const ZERO_CLAV = () => ({ L: { elev: 0, prot: 0, up: 0 }, R: { elev: 0, prot: 0, up: 0 } });
 const clavZero = (p) => !p || !p.clavicle || ["L", "R"].every((s) => !p.clavicle[s] || Object.values(p.clavicle[s]).every((v) => !v));
 const isZero = (p) => SR.isZero(p) && clavZero(p);
 const ZERO = () => ({ ...SR.ZERO(), clavicle: ZERO_CLAV() });
@@ -1826,16 +2176,124 @@ const ZERO = () => ({ ...SR.ZERO(), clavicle: ZERO_CLAV() });
 // combined motions share one envelope (as in the spinal rig): |(e, p, r) / limits|_2 <= 1
 function clavSolve(a) {
   const lim = clavLimits(), cl = (v, r) => Math.max(r[0], Math.min(r[1], v || 0));
-  let e = cl(a.elev, lim.elev), p = cl(a.prot, lim.prot), r = cl(a.rot, lim.rot);
-  const n = Math.hypot(e / (e >= 0 ? lim.elev[1] : -lim.elev[0]), p / (p >= 0 ? lim.prot[1] : -lim.prot[0]), r / lim.rot[1]);
-  if (n > 1) { e /= n; p /= n; r /= n; }
-  return { elev: e, prot: p, rot: r, envelope: n, scaled: n > 1 };
+  let e = cl(a.elev, lim.elev), p = cl(a.prot, lim.prot), u = cl(a.up, lim.up);
+  const n = Math.hypot(e / (e >= 0 ? lim.elev[1] : -lim.elev[0]), p / (p >= 0 ? lim.prot[1] : -lim.prot[0]), u / (u >= 0 ? lim.up[1] : -lim.up[0]));
+  if (n > 1) { e /= n; p /= n; u /= n; }
+  return { elev: e, prot: p, up: u, envelope: n, scaled: n > 1 };
 }
-function clavR(side, a, axis) {
-  const q = clavSolve(a), e = q.elev * DEG, p = q.prot * DEG, r = q.rot * DEG;
-  const u = side === "L" ? axis : mv(MIR, axis);                            // rest long axis in left-side terms
-  const RL = mm(ry(-p), mm(rz(e), axisAngle(u, -r)));
+// sternoclavicular rotation for given angles (left side; right mirrored): axial (posterior) rotation about the clavicle's
+// rest axis, then elevation about the AP axis, then protraction about the vertical axis
+function clavRaw(side, e, p, r, axis) {
+  const u = side === "L" ? axis : mv(MIR, axis);
+  const RL = mm(ry(-p * DEG), mm(rz(e * DEG), axisAngle(u, -r * DEG)));
   return side === "L" ? RL : mm(MIR, mm(RL, MIR));
+}
+const clavR = (side, a, axis) => { const q = clavSolve(a); return clavRaw(side, q.elev, q.prot, 0, axis); };
+
+// ---------- shoulder girdle: clavicle + scapula gliding on the rib cage ----------
+// Each scapula hangs from its clavicle at the AC joint and glides over the thoracic surface (rib cage blended into one
+// sheet) at its rest soft-tissue distance. Unknowns per side: extra clavicle elevation, clavicle axial rotation and the
+// three AC rotations. The two medial-border contacts (trigonum spinae, inferior angle) keep their rest gap; the rest of
+// the costal surface may not come closer than ST.softTissueMin. Upward rotation is the user's independent control; the
+// other rotations follow from the contacts with as little AC and clavicle rotation as possible.
+function makeShoulder(sk, els) {
+  const sh = sk.shoulder, glide = sh.glide, out = {};
+  for (const scap of els.filter((e) => e.kind === "scapula")) {
+    const side = scap.side, clav = els.find((e) => e.id === `CLAV_${side}`), lm = scap.landmarks;
+    const toW = (p) => C.toWorld(scap, p);
+    const ant = (p) => [p[0], p[1], p[2] + 1.6];                // costal surface of a medial-border point (local w = anterior)
+    const contacts = ["TS", "AI"].map((k) => toW(ant(lm[k])));
+    // other costal-surface samples: along the medial and lateral borders and across the blade
+    const S = Sh.LM, sg = side === "L" ? 1 : -1, J0 = sh.Fj;
+    const loc = (p) => [sg * (p[0] - J0[0]), p[1] - J0[1], p[2] - J0[2]];
+    const extra = [[7, 46, 0], [2, 24, 0.5], [4, -50, 1], [40, -75, 1.5], [66, -40, 1], [42, -22, 3.5], [32, 42, 1.5], [70, 32, 0], [20, -88, 1]]
+      .map(([u, v, wp]) => toW(ant(loc([u * 1.1, v, -wp]))));
+    // costal-surface samples from the real shape: the points of the scapula nearest the rib cage at rest
+    const sc = C.compile(scap), b = sc.box, shell = [];
+    for (let x = b[0]; x <= b[3]; x += 4) for (let y = b[1]; y <= b[4]; y += 4) for (let z = b[2]; z <= b[5]; z += 4) { const d = sc.sdf(x, y, z); if (d < 0 && d > -4) shell.push(toW([x, y, z])); }
+    const near = shell.map((p) => [p, glide(side, p)]).filter(([, g]) => g < 30).sort((a, b) => a[1] - b[1]);
+    for (let i = 0; i < near.length && extra.length < 32; i += Math.max(1, Math.floor(near.length / 22))) extra.push(near[i][0]);
+    const g0 = contacts.map((p) => glide(side, p)), gx = extra.map((p) => glide(side, p));
+    // acromioclavicular joint: points on the clavicle's lateral end, kept 0.5–3 mm from the acromion
+    const cl = els.find((e) => e.id === `CLAV_${side}`), acPts = Th.tubeSurface(cl.geo.nodes.slice(-3), null, 10);
+    const lmW = Object.fromEntries(["TS", "AA", "SA", "AI"].map((k) => [k, toW(lm[k])]));
+    out[side] = { side, scap, clav, contacts, extra, g0, gx, J: scap.o.slice(), lmW, rest: angleSet(side, lmW, ID()), sc, acPts };
+  }
+  return out;
+}
+function angleSet(side, w, T) {      // clinical angles in the thorax frame T (sternum); right side mirrored onto the left
+  const inv = (p) => { const q = mv(tr(T.R), sub(p, T.t)); return side === "L" ? q : [-q[0], q[1], q[2]]; };
+  return Sh.angles(inv(w.TS), inv(w.AA), inv(w.SA), inv(w.AI));
+}
+const mirT = (T) => ({ R: mm(MIR, mm(T.R, MIR)), t: mv(MIR, T.t) });
+// Both sides are solved by the same left-side problem: the right side's thorax state is mirrored onto the left, solved,
+// and mirrored back. Symmetric inputs therefore give exactly mirrored shoulders.
+function solveShoulder(rig, side, Tst, ribsT, input) {
+  if (side === "L") return solveShoulderL(rig, Tst, ribsT, input);
+  const rm = {}; if (ribsT) for (const id in ribsT) if (id.endsWith("_R")) rm[id.replace(/_R$/, "_L")] = mirT(ribsT[id]);
+  const r = solveShoulderL(rig, mirT(Tst), ribsT ? rm : null, input);
+  return { ...r, Tc: mirT(r.Tc), Ts: mirT(r.Ts) };
+}
+function solveShoulderL(rig, Tst, ribsT, input) {
+  const side = "L";
+  // continuation: large inputs are approached in steps from rest, each step starting from the previous solution,
+  // so the solver follows the gliding path instead of jumping to a distant (unnatural) solution
+  const q0 = clavSolve(input || {}), N = Math.max(1, Math.ceil(Math.max(Math.abs(q0.elev) / 8, Math.abs(q0.prot) / 6, Math.abs(q0.up) / 6)));
+  let x = [0, 0, 0, 0, 0], res = null;
+  for (let s = 1; s <= N; s++) { res = solveShoulderStep(rig, "L", Tst, ribsT, { elev: q0.elev * s / N, prot: q0.prot * s / N, up: q0.up * s / N }, x); x = res.x; }
+  res.input = q0; return res;
+}
+function solveShoulderStep(rig, side, Tst, ribsT, input, x0) {
+  const S = rig.shoulder[side], clav = S.clav, q = clavSolve(input || {}), lim = clavLimits();
+  const glide = rig.sk.shoulder.glide, Rn = (x) => x * DEG;
+  const pose = (x) => {
+    const Tc = comp(Tst, about(clavRaw(side, q.elev + x[0], q.prot, x[1], clav.joint.axis), clav.joint.pivot));
+    const Ts = comp(Tc, about(rotvec([Rn(x[2]), Rn(x[3]), Rn(x[4])]), S.J));
+    return { Tc, Ts };
+  };
+  const wl = (Ts) => Object.fromEntries(Object.entries(S.lmW).map(([k, p]) => [k, app(Ts, p)]));
+  const soft = ST.softTissueMin;
+  const resid = (x, urTarget) => {
+    const { Tc, Ts } = pose(x), r = [];
+    // AC joint space: clavicle end points (moved with the clavicle) in the scapula's frame
+    let acMin = 1e9; const iTs = inv(Ts);
+    for (const p of S.acPts) { const w = app(iTs, app(Tc, p)), l = C.toLocal(S.scap, w), d = S.sc.sdf(l[0], l[1], l[2]); if (d < acMin) acMin = d; }
+    r.push(acMin < 0.5 ? 4 * (0.5 - acMin) : acMin > 3 ? 2 * (acMin - 3) : 0);
+    S.contacts.forEach((p, i) => r.push(2 * (glide(side, app(Ts, p), ribsT) - S.g0[i])));
+    S.extra.forEach((p, i) => { const g = glide(side, app(Ts, p), ribsT), m = Math.min(soft, S.gx[i]); r.push(g < m ? 3 * (m - g) : 0); });
+    if (urTarget != null) r.push(1.5 * (angleSet(side, wl(Ts), Tst).ur - urTarget));
+    const e = q.elev + x[0], over = (v, a, b) => (v < a ? a - v : v > b ? v - b : 0);
+    // clavicle elevation follows the user exactly unless upward rotation asks for more; the clavicle's axial rotation and
+    // the AC rotations are kept as small as the gliding allows
+    r.push((urTarget == null ? 5 : 0.12) * x[0], 0.04 * x[1], 0.08 * x[2], 0.08 * x[3], 0.08 * x[4]);
+    r.push(4 * over(e, lim.elev[0], lim.elev[1]), 4 * over(x[1], -5, lim.rot[1]), 10 * over(Math.hypot(x[2], x[3], x[4]), 0, ST.acRange));
+    return r;
+  };
+  const lm = (x0, urTarget) => {
+    let x = x0.slice(), r = resid(x, urTarget), f = r.reduce((a, v) => a + v * v, 0), mu = 1e-2;
+    for (let it = 0; it < 40; it++) {
+      const J = x.map((_, j) => { const xp = x.slice(); xp[j] += 1e-3; return resid(xp, urTarget).map((v, i) => (v - r[i]) / 1e-3); });
+      const n = x.length, A = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, b) => { let s = 0; for (let i = 0; i < r.length; i++) s += J[a][i] * J[b][i]; return s; }));
+      const g = x.map((_, a) => { let s = 0; for (let i = 0; i < r.length; i++) s += J[a][i] * r[i]; return -s; });
+      let acc = false;
+      for (let k = 0; k < 8; k++) {
+        const dx = solveLin(A.map((row, a) => row.map((v, b) => v + (a === b ? mu * (1 + A[a][a]) : 0))), g), xn = x.map((v, i) => v + dx[i]);
+        const rn = resid(xn, urTarget), fn = rn.reduce((a, v) => a + v * v, 0);
+        if (fn < f) { acc = f - fn > 1e-8; x = xn; r = rn; f = fn; mu = Math.max(1e-7, mu / 3); break; } mu *= 4;
+      }
+      if (!acc) break;
+    }
+    return { x, f };
+  };
+  // natural position for this clavicle input (no upward-rotation target), then the user's upward rotation on top of it
+  const xs = x0.slice(); xs[1] = 0;
+  let sol = lm(Math.abs(q.up) > 1e-9 ? [x0[0] * 0, 0, 0, 0, 0] : x0, null);
+  const natural = angleSet(side, wl(pose(sol.x).Ts), Tst).ur;
+  if (Math.abs(q.up) > 1e-9) sol = lm(x0, natural + q.up);
+  const { Tc, Ts } = pose(sol.x), ang = angleSet(side, wl(Ts), Tst);
+  const gaps = [...S.contacts, ...S.extra].map((p) => glide(side, app(Ts, p), ribsT));
+  return { Tc, Ts, x: sol.x, input: q, angles: ang, rest: S.rest, natural, minGap: Math.min(...gaps), contactGap: gaps.slice(0, 2), clavicle: { elev: q.elev + sol.x[0], prot: q.prot, rot: sol.x[1] },
+    ac: Math.hypot(sol.x[2], sol.x[3], sol.x[4]), residual: Math.sqrt(sol.f) };
 }
 
 // Rib-cage solution for given vertebral transforms (delta: id -> T)
@@ -1897,20 +2355,24 @@ function posedModel(rig, restComps, pose) {
   const els = sp.els.slice(), comps = sp.comps.slice();
   const geo = Th.cartilageGeometry(rig.ribEl, rig.ccDefs, sol);
   const clav = (pose.clavicle) || ZERO_CLAV();
-  const clavT = {};
+  const clavT = {}, girdle = {};
+  for (const side of ["L", "R"]) girdle[side] = solveShoulder(rig, side, sol.sternum, sol.ribs, clav[side]);
   for (let k = nS; k < rig.els.length; k++) {
     const el = rig.els[k];
     if (el.kind === "rib") { const T = sol.ribs[el.id]; els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]); }
     else if (el.kind === "sternum") { const T = sol.sternum; els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]); }
     else if (el.kind === "clavicle") {
-      const T = comp(sol.sternum, about(clavR(el.side, clav[el.side] || {}, el.joint.axis), el.joint.pivot)); clavT[el.id] = T;
+      const T = girdle[el.side].Tc; clavT[el.id] = T;
       els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]);
+    } else if (el.kind === "scapula") {
+      const T = girdle[el.side].Ts;
+      els.push({ ...el, R: mm(T.R, el.R), o: app(T, el.o), delta: T }); comps.push(restComps[k]);
     } else if (el.kind === "cartilage") {
       const g = geo[el.id], pel = { ...el, o: g.nodes[0].p.slice(), geo: g, R: undefined, psi: 0, stretch: g.arc / el.restArc, chordRatio: g.chord / el.restLen };
       els.push(pel); comps.push(C.compile(pel));
     }
   }
-  return { els, comps, solved: sp.solved, neutral: false, thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
+  return { els, comps, solved: sp.solved, neutral: false, girdle, thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
     stretch: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].arc / c.restArc])),
     chord: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].chord / c.restLen])) } };
 }
@@ -1918,15 +2380,17 @@ function posedModel(rig, restComps, pose) {
 // demonstration poses: the approved spinal demos (unchanged ids) plus clavicle demos for the future shoulder girdle
 function demoPoses() {
   const D = SR.demoPoses().map((d) => ({ ...d, pose: { ...d.pose, clavicle: ZERO_CLAV() } }));
-  const lim = clavLimits(), both = (o) => ({ L: { elev: 0, prot: 0, rot: 0, ...o }, R: { elev: 0, prot: 0, rot: 0, ...o } });
+  const lim = clavLimits(), both = (o) => ({ L: { elev: 0, prot: 0, up: 0, ...o }, R: { elev: 0, prot: 0, up: 0, ...o } });
   const r1 = (v) => Math.round(v * 10) / 10;
   D.push({ id: "shrug", name: "Shrug", pose: { ...SR.ZERO(), clavicle: both({ elev: r1(lim.elev[1]) }) } });
   D.push({ id: "shoulders-back", name: "Shoulders back", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[0] * 0.85), elev: r1(lim.elev[0] * 0.5) }) } });
+  D.push({ id: "reach-forward", name: "Reach forward", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[1]) }) } });
+  D.push({ id: "upward-rotation", name: "Upward rotation", pose: { ...SR.ZERO(), clavicle: both({ up: r1(lim.up[1]) }) } });
   return D;
 }
 // scale every angle of a pose (nested clavicle sides included)
 const scalePose = (p, f) => JSON.parse(JSON.stringify(p), (k, v) => (typeof v === "number" ? v * f : v));
-const API = { demoPoses, scalePose, buildSkeleton, makeRig, posedModel, solveRibcage, clavLimits, clavSolve, clavR, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
+const API = { demoPoses, scalePose, buildSkeleton, makeRig, posedModel, solveRibcage, solveShoulder, clavLimits, clavSolve, clavR, clavRaw, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
 if (NODE) module.exports = API;
 else root.ThoraxRig = API;
 })(typeof self !== "undefined" ? self : this);
@@ -2130,7 +2594,7 @@ function stylise(g, model, st0) {
   }
   // separate bones that touch without a depth jump (clavicle on the manubrium, rib head on its vertebra): a joint line,
   // drawn on the farther of the two. Applies to skeletal elements added after the spine; spine-only pairs are unchanged.
-  const THX = { rib: 1, sternum: 1, clavicle: 1 };
+  const THX = { rib: 1, sternum: 1, clavicle: 1, scapula: 1 };
   const joint = (p, q) => { const a = model.els[objOf[p] - 1], b = model.els[objOf[q] - 1];
     return a && b && a !== b && (THX[a.kind] || THX[b.kind]) && a.kind !== "cartilage" && b.kind !== "cartilage" && a.kind !== "disc" && b.kind !== "disc" && depth[q] <= depth[p]; };
   let lab = new Uint8Array(n);
@@ -2227,13 +2691,15 @@ const SLOT = ["outline", "line", "shade", "mid", "light", "hi"];
 const BGS = { neutral: ["Neutral", "#2a2f35"], checker: ["Transparent", null], dark: ["Dark", "#121417"], light: ["Light", "#eef0f2"], skin: ["Skin", "#c99a7c"] };
 const PART_COLORS = { 1: "#d9a441", 2: "#5aa6c9", 3: "#8b7fd1", 4: "#5fb38a", 5: "#d9708a", 6: "#c98b5a", 7: "#7c9cd9", 8: "#e0605a", 9: "#59b7c9",
   10: "#a87fc9", 11: "#c9c25a", 12: "#a7b2b0", 13: "#b59a72", 14: "#e3b98f", 15: "#c7a5c9", 16: "#e89a4f", 17: "#6fcf9a", 18: "#d9a441", 19: "#3a3330",
-  20: "#e0605a", 21: "#e89a4f", 22: "#c9c25a", 23: "#d9b98a", 24: "#a7b2b0", 25: "#59b7c9", 26: "#5aa6c9", 27: "#8b7fd1", 28: "#6fcf9a", 29: "#5fb38a", 30: "#c7a5c9" };
+  20: "#e0605a", 21: "#e89a4f", 22: "#c9c25a", 23: "#d9b98a", 24: "#a7b2b0", 25: "#59b7c9", 26: "#5aa6c9", 27: "#8b7fd1", 28: "#6fcf9a", 29: "#5fb38a", 30: "#c7a5c9",
+  31: "#7c9cd9", 32: "#5fb38a", 33: "#d9a441", 34: "#e0605a", 35: "#c98b5a", 36: "#a87fc9", 37: "#59b7c9", 38: "#6fcf9a", 39: "#e89a4f", 40: "#c9c25a", 41: "#d9708a", 42: "#8b7fd1" };
 const REGION_COLORS = { cervical: "#d9a441", thoracic: "#5aa6c9", lumbar: "#8b7fd1", sacral: "#5fb38a", coccygeal: "#d9708a", disc: "#a7b2b0",
-  ribcage: "#e3b98f", cartilage: "#cfd8d4", sternum: "#e0605a", clavicle: "#6fcf9a" };
-const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Discs", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicles" };
+  ribcage: "#e3b98f", cartilage: "#cfd8d4", sternum: "#e0605a", clavicle: "#6fcf9a", scapula: "#c9c25a" };
+const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Discs", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicles", scapula: "Scapulae" };
 const DEMO_NAMES = { neutral: "Neutral", flexion: "Bend forward", extension: "Bend back", "bend-left": "Side bend left", "bend-right": "Side bend right",
-  "rotate-left": "Twist left", "rotate-right": "Twist right", combined: "Combined", shrug: "Shrug", "shoulders-back": "Shoulders back" };
-const REGIONS = [["cervical", "Neck"], ["thoracic", "Upper back"], ["lumbar", "Lower back"], ["clavicle", "Clavicles"]];
+  "rotate-left": "Twist left", "rotate-right": "Twist right", combined: "Combined", shrug: "Shrug", "shoulders-back": "Shoulder blades back",
+  "reach-forward": "Reach forward", "upward-rotation": "Upward rotation" };
+const REGIONS = [["cervical", "Neck"], ["thoracic", "Upper back"], ["lumbar", "Lower back"], ["clavicle", "Shoulders"]];
 const LOOK = { lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, outline: true, lines: true, gap: 3, rim: true, clusters: true, mm: 1, bg: "neutral",
   bone6: PRESETS["Study bone (approved)"], disc6: R.PALETTES.disc, preset: "Study bone (approved)" };
 const DEFAULTS = { tab: "skeleton", view: "front", side: "R", zoom: "fit", labels: false, guides: false, colorby: "none",
@@ -2252,8 +2718,8 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch
 const sk = TR.buildSkeleton();
 const full = { els: sk.els, comps: sk.els.map(C.compile) };
 const rig = TR.makeRig(sk);
-const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" ? "clavicles" : "spine");
-const normPose = (p) => { const z = TR.ZERO(); p = p || {}; for (const k of [...ROM.REGIONS, "root"]) z[k] = { ...z[k], ...(p[k] || {}) }; for (const s of ["L", "R"]) z.clavicle[s] = { ...z.clavicle[s], ...((p.clavicle || {})[s] || {}) }; return z; };
+const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" || el.kind === "scapula" ? "clavicles" : "spine");
+const normPose = (p) => { const z = TR.ZERO(); p = p || {}; for (const k of [...ROM.REGIONS, "root"]) z[k] = { ...z[k], ...(p[k] || {}) }; for (const s of ["L", "R"]) { const c = (p.clavicle || {})[s] || {}; for (const k of ["elev", "prot", "up"]) z.clavicle[s][k] = +c[k] || 0; } return z; };
 const poseKey = (p) => JSON.stringify(normPose(p));
 S.pose = normPose(S.pose);
 if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 };
@@ -2269,7 +2735,7 @@ const viewSpec = (m, id, mm) => { const W = Math.round(m.frameMM / mm); return {
 const visible = () => full.els.map((e, k) => (S.layers[layerOf(e)] ? k : -1)).filter((k) => k >= 0);
 
 // ---------- workers ----------
-const SRC = ["core-src", "rom-src", "rig-src", "thorax-src", "thorax-rig-src", "render-src"].map((id) => $(id).textContent).join("\n") + `
+const SRC = ["core-src", "rom-src", "rig-src", "thorax-src", "shoulder-src", "thorax-rig-src", "render-src"].map((id) => $(id).textContent).join("\n") + `
   let SK = null, FULL = null, RIGW = null;
   function full() { if (!FULL) { SK = ThoraxRig.buildSkeleton(); FULL = { els: SK.els, comps: SK.els.map(SpineCore.compile) }; RIGW = ThoraxRig.makeRig(SK); } return FULL; }
   self.onmessage = (ev) => {
@@ -2512,19 +2978,19 @@ function buildRegion() {
     const env = document.createElement("p"); env.className = "hint"; env.id = "env-note"; box.appendChild(env);
   } else {
     const ck = document.createElement("label"); ck.className = "check"; ck.htmlFor = "clav-link";
-    ck.innerHTML = `<input type="checkbox" id="clav-link"> Move both clavicles together`; box.appendChild(ck);
+    ck.innerHTML = `<input type="checkbox" id="clav-link"> Move both shoulders together`; box.appendChild(ck);
     const inp = ck.querySelector("input"); inp.checked = S.clavLink;
     inp.addEventListener("change", () => { S.clavLink = inp.checked; if (S.clavLink) { S.pose.clavicle.R = { ...S.pose.clavicle.L }; onPose(); } save(); buildRegion(); });
     const L = TR.clavLimits();
     for (const side of S.clavLink ? ["L"] : ["L", "R"]) {
-      if (!S.clavLink) { const h = document.createElement("div"); h.className = "sub"; h.textContent = side === "L" ? "Left clavicle" : "Right clavicle"; box.appendChild(h); }
+      if (!S.clavLink) { const h = document.createElement("div"); h.className = "sub"; h.textContent = side === "L" ? "Left shoulder" : "Right shoulder"; box.appendChild(h); }
       const setC = (ax) => (v) => { S.pose.clavicle[side][ax] = v; if (S.clavLink) S.pose.clavicle.R[ax] = v; onPose(); };
       regionSliders.push(slider(box, { id: `c-${side}-elev`, label: "Raise / lower", min: L.elev[0].toFixed(1), max: L.elev[1].toFixed(1), ends: ["lower", "raise"],
         get: () => S.pose.clavicle[side].elev, set: setC("elev"), fmt: (v) => deg(v, "down", "up") }));
       regionSliders.push(slider(box, { id: `c-${side}-prot`, label: "Forward / back", min: L.prot[0].toFixed(1), max: L.prot[1].toFixed(1), ends: ["back", "forward"],
         get: () => S.pose.clavicle[side].prot, set: setC("prot"), fmt: (v) => deg(v, "back", "forward") }));
-      regionSliders.push(slider(box, { id: `c-${side}-rot`, label: "Roll back", min: L.rot[0].toFixed(1), max: L.rot[1].toFixed(1), ends: ["none", "full"],
-        get: () => S.pose.clavicle[side].rot, set: setC("rot"), fmt: (v) => deg(v, "", "back") }));
+      regionSliders.push(slider(box, { id: `c-${side}-up`, label: "Shoulder blade rotation", min: L.up[0].toFixed(1), max: L.up[1].toFixed(1), ends: ["downward", "upward"],
+        get: () => S.pose.clavicle[side].up, set: setC("up"), fmt: (v) => deg(v, "downward", "upward") }));
     }
     const env = document.createElement("p"); env.className = "hint"; env.id = "env-note"; box.appendChild(env);
   }
@@ -2550,7 +3016,7 @@ function syncPose() {
   const env = $("env-note");
   if (env) {
     if (S.region === "clavicle") { const q = TR.clavSolve(S.pose.clavicle.L), q2 = TR.clavSolve(S.pose.clavicle.R), e = Math.max(q.envelope, q2.envelope);
-      env.textContent = e ? `Using ${Math.round(Math.min(1, e) * 100)} % of the clavicles' combined range${q.scaled || q2.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
+      env.textContent = e ? `Using ${Math.round(Math.min(1, e) * 100)} % of the shoulders' combined range${q.scaled || q2.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
     else { const r = SR.solve(S.pose).regions[S.region]; env.textContent = r.envelope ? `Using ${Math.round(Math.min(1, r.envelope) * 100)} % of this region's combined range${r.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
   }
 }
@@ -2651,7 +3117,7 @@ function syncLook() {
 function updateTech() {
   const sol = SR.solve(S.pose), pc = (e) => (e ? `${Math.round(Math.min(1, e) * 100)} %${e > 1 ? " (scaled)" : ""}` : "0 %");
   const q = ["L", "R"].map((s) => TR.clavSolve(S.pose.clavicle[s]));
-  $("envelopes").innerHTML = [["Neck", sol.regions.cervical.envelope], ["Upper back", sol.regions.thoracic.envelope], ["Lower back", sol.regions.lumbar.envelope], ["Clavicle left", q[0].envelope], ["Clavicle right", q[1].envelope]]
+  $("envelopes").innerHTML = [["Neck", sol.regions.cervical.envelope], ["Upper back", sol.regions.thoracic.envelope], ["Lower back", sol.regions.lumbar.envelope], ["Shoulder left", q[0].envelope], ["Shoulder right", q[1].envelope]]
     .map(([n, e]) => `<dt>${n}</dt><dd>${pc(e)}</dd>`).join("");
   const th = model.thorax;
   if (!th) $("ribcage").innerHTML = `<dt>State</dt><dd>at rest</dd>`;
@@ -2660,12 +3126,19 @@ function updateTech() {
     $("ribcage").innerHTML = `<dt>Costovertebral rotation, max</dt><dd>${cv.toFixed(1)}°</dd><dt>Cartilage end distance</dt><dd>${(Math.min(...ch) * 100).toFixed(1)}–${(Math.max(...ch) * 100).toFixed(1)} %</dd>
       <dt>Cartilage length, max</dt><dd>${(Math.max(...ar) * 100).toFixed(1)} %</dd><dt>Sternum fit residual</dt><dd>${th.residual.toFixed(2)}</dd>`;
   }
+  const gd = model.girdle, rs = rig.shoulder, f1 = (v) => (v >= 0 ? "+" : "") + v.toFixed(1) + "°";
+  const ga = (side) => (gd ? gd[side].angles : rs[side].rest);
+  $("girdle").innerHTML = [["Internal rotation", (a) => a.ir], ["Upward rotation", (a) => a.ur], ["Anterior tilt", (a) => a.tilt]]
+    .map(([n, fn]) => `<dt>${n}</dt><dd>${f1(fn(ga("L")))} / ${f1(fn(ga("R")))}</dd>`).join("") +
+    (gd ? `<dt>Clavicle elev · prot · axial</dt><dd>${["L", "R"].map((sd) => [gd[sd].clavicle.elev, gd[sd].clavicle.prot, gd[sd].clavicle.rot].map((v) => v.toFixed(0)).join(" · ")).join(" / ")}</dd>
+      <dt>AC joint rotation</dt><dd>${gd.L.ac.toFixed(1)}° / ${gd.R.ac.toFixed(1)}°</dd><dt>Scapula–rib gap, min</dt><dd>${gd.L.minGap.toFixed(1)} / ${gd.R.minGap.toFixed(1)} mm</dd>
+      <dt>Upward rotation asked · reached</dt><dd>${["L", "R"].map((sd) => `${gd[sd].input.up.toFixed(0)} · ${(gd[sd].angles.ur - gd[sd].natural).toFixed(0)}`).join(" / ")}</dd>` : `<dt>State</dt><dd>at rest</dd>`);
   const rows = ROM.SEGMENTS.map((s) => { const a = sol.segments[s.id], c = Math.max(Math.abs(a.fe) / (a.fe >= 0 ? s.cap.flex : s.cap.ext), Math.abs(a.lb) / s.cap.lb, Math.abs(a.ar) / s.cap.ar);
     return `<tr><td>${s.id}</td><td>${a.fe.toFixed(1)}</td><td>${a.lb.toFixed(1)}</td><td>${a.ar.toFixed(1)}</td><td>${Math.round(c * 100)}%</td></tr>`; }).join("");
   $("seg-table").innerHTML = `<table><tr><th>Segment</th><th>Flex</th><th>Bend L</th><th>Rot L</th><th>of cap</th></tr>${rows}</table>`;
   const n = (k) => full.els.filter((e) => e.kind === k).length;
   $("model-info").innerHTML = `<dt>Subject</dt><dd>female, 183 cm, 78 kg</dd><dt>Elements</dt><dd>${full.els.length}</dd><dt>Vertebrae, discs</dt><dd>24 + S + Co, ${n("disc")}</dd>
-    <dt>Ribs, cartilages</dt><dd>${n("rib")}, ${n("cartilage")}</dd><dt>Sternum, clavicles</dt><dd>${n("sternum")}, ${n("clavicle")}</dd>
+    <dt>Ribs, cartilages</dt><dd>${n("rib")}, ${n("cartilage")}</dd><dt>Sternum, clavicles, scapulae</dt><dd>${n("sternum")}, ${n("clavicle")}, ${n("scapula")}</dd>
     <dt>Frame</dt><dd>${st ? `${st.W} × ${st.H} px` : ""} at ${S.mm} mm/px</dd>`;
 }
 

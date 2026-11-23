@@ -11,14 +11,14 @@ The lab has exactly three tabs:
 
 | Tab | Status | What it shows |
 |---|---|---|
-| **Skeleton** | spine, rig, rib cage and clavicles approved | the assembled skeleton: C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs, 12 rib pairs with their costal cartilages, sternum and both clavicles |
+| **Skeleton** | spine, rig, rib cage, clavicles approved; scapulae awaiting review | the assembled skeleton: C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs, 12 rib pairs with their costal cartilages, sternum, both clavicles and both scapulae |
 | **Body** | not started | muscle and soft tissue around the skeleton (weight is accounted for here) |
 | **Clothing** | not started | close-fitting garments following the body |
 
 The Skeleton tab is built around one workflow: view the character → choose an angle → pick or adjust a movement → play it → export.
 
 - **Preview first.** The preview takes most of the window. Above it: Front, ¾, Side, Back and ¾ back, a Right / Left switch for the side of the body facing the camera, a small top-down compass, and zoom (Fit, −, +). Fit always fits the whole frame, below 1× when needed (crisp whole-number zoom from 1× up). Below it: Play / Pause (Space) and Reset pose.
-- **Movement.** Presets first. *Adjust pose* (collapsed) has Neck, Upper back, Lower back and Clavicles, each with plain controls (Bend forward / back, Bend sideways, Twist; Raise / lower, Forward / back, Roll back) and the angle beside each. Clavicles move together unless unlinked. The pelvis (sacrum) sits in an advanced subsection and stays fixed by default.
+- **Movement.** Presets first. *Adjust pose* (collapsed) has Neck, Upper back, Lower back and Shoulders, each with plain controls (Bend forward / back, Bend sideways, Twist; Raise / lower, Forward / back, Shoulder blade rotation) and the angle beside each. Both shoulders move together unless unlinked. The pelvis (sacrum) sits in an advanced subsection and stays fixed by default.
 - **Visibility** (collapsed): spine, rib cage, clavicles, anatomical labels, centre guides, diagnostic colouring. Labels and guides start off.
 - **Appearance** (collapsed): palette presets and custom colours, background, pixel detail (mm per pixel, independent of zoom), lighting, pixel rules, style JSON, and *Reset appearance*, which resets only these.
 - **Technical details** (collapsed): range-of-motion envelopes, rib-cage response, segment angles, how movement works.
@@ -87,6 +87,21 @@ than 0.3 mm. The thoracic limits in `src/spine-rom.js` are therefore unchanged. 
 | `node tools/skel-views.js out 3` | the rest skeleton in eight views plus top |
 | `node tools/skel-demos.js out/skel 0/1` | every demonstration (spine and clavicles) in four views; `--frames` for playback in-betweens |
 
+## Shoulder girdle: scapulae
+
+Added on top of the approved spine, rib cage, sternum and clavicles; none of their shapes change.
+
+- **Scapulae:** `SCAP_L`, `SCAP_R`, mirror images, each with body (blade), spine, acromion, coracoid process, glenoid cavity, medial, lateral and superior borders, superior and inferior angles. The costal (anterior) surface carries the subscapular fossa; the dorsal surface the supraspinous and infraspinous fossae (hover names them). Female references scaled to 183 cm: superior to inferior angle 148 mm (female mean 140.6), width to the glenoid 103 mm, spine to the acromion tip 132 mm (128–134), glenoid 36 × 27 mm (female 34.8 × 26.2), inclination 12°.
+- **Placement:** each acromion meets the end of its approved clavicle at the acromioclavicular joint (≈ 1.5 mm joint space). The medial border rests on the rib cage at a 10 mm soft-tissue distance (serratus anterior, subscapularis). Superior angle at T2, root of the spine at T4, inferior angle at the T8 body (T7 spinous process), as palpation references give.
+- **Orientation, and one point for review:** with the approved clavicle (20° retraction) and rib cage, the solved resting scapula is ≈ 10° anteriorly tilted and ≈ 2° upwardly rotated (references: ≈ 10° and a few degrees), but only ≈ 6° internally rotated measured from the spine root to the acromial angle (references: ≈ 26–41°). The glenoid faces ≈ 16° forward of lateral and 10° upward. The medial border sits 90–104 mm from the midline (palpation references: ≈ 50–75 mm in average-size adults). Both follow from the clavicle's lateral end sitting fairly far back for this rib cage. Bringing the shoulder forward (less clavicle retraction) or deepening the upper posterior rib cage would raise the internal rotation; neither was changed without approval.
+- **Rig:** scapula = clavicle (sternoclavicular joint) → acromioclavicular joint (3 rotations) → scapula, gliding on the rib cage. The gliding surface is the outer surface of the same-side ribs 1–10 blended into one sheet; it moves with the ribs in every spinal pose. Controls per side: **raise / lower** and **forward / back** (clavicle at the sternoclavicular joint, 85 % of the approved ranges) and **shoulder blade rotation** (scapular upward / downward rotation). The clavicle's axial rotation, extra clavicle elevation for upward rotation, and the AC rotations (tilt, internal / external rotation) are solved each pose so that the trigonum spinae and inferior angle keep their rest distance to the ribs, the rest of the costal surface stays ≥ 5 mm off the ribs, the AC joint space stays 0.5–3 mm, and joints turn as little as possible. Large inputs are approached in steps from rest; the right side is solved as the mirror of the left, so symmetric inputs give exactly mirrored shoulders.
+- **Limits:** upward rotation without arms: 26° (cadaveric isolated shrug, JSES Int 2023), controls 85 % (22°); the 43–50° reached with full arm elevation (Ludewig 2010, McClure 2001) is stored for the arm stage. Downward rotation 10° and the AC range 25° are approximations, marked in `src/spine-rom.js`. No scapulohumeral rhythm is imposed. Combined shoulder inputs share one envelope per side.
+- **Change to clavicle behaviour:** the clavicle's axial (posterior) rotation is now solved by the girdle instead of being a separate control; the clavicle's shape, rest position, elevation and protraction controls and limits are unchanged.
+
+| Command | Output |
+|---|---|
+| `node tools/shoulder-check.js [--json out.json]` | scapula IDs, AC connection, rib-cage clearance, gliding contact, symmetry, proportions, limits, neutral restoration, in every spinal and shoulder demonstration and in combined poses |
+
 ## Pixel style
 
 One model, every view: each bone is a signed distance field in millimetres, projected orthographically. Light is fixed to the
@@ -107,7 +122,8 @@ thorax bones touch without a depth jump (clavicle on the manubrium, rib head on 
 | `src/spine-rom.js` | movement limits, distribution, coupling and references (one place to review and adjust) |
 | `src/spine-rig.js` | the rig: pose → segment angles → rigid vertebrae and deforming discs |
 | `src/thorax-core.js` | ribs, costal cartilages, sternum and clavicles: data, placement on the spine, shapes |
-| `src/thorax-rig.js` | rib-cage response to spinal poses, clavicle controls, skeleton demonstrations |
+| `src/shoulder-core.js` | both scapulae: reference data, shape, placement on the clavicle and rib cage, gliding surface |
+| `src/thorax-rig.js` | rib-cage response to spinal poses, shoulder girdle (clavicle + scapula) solver, skeleton demonstrations |
 | `src/spine-render.js` | ray caster and the pixel-art pass |
 | `src/measure.js` | landmark measurements from the model |
 | `app/` | the lab's page (`shell.html`) and interface (`app.js`) |

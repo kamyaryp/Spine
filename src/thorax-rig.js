@@ -16,6 +16,7 @@ const NODE = typeof module !== "undefined" && module.exports;
 const C = NODE ? require("./spine-core.js") : root.SpineCore;
 const Th = NODE ? require("./thorax-core.js") : root.ThoraxCore;
 const SR = NODE ? require("./spine-rig.js") : root.SpineRig;
+const Sh = NODE ? require("./shoulder-core.js") : root.ShoulderCore;
 const ROM = NODE ? require("./spine-rom.js") : root.SpineROM;
 const DEG = Math.PI / 180;
 
@@ -73,8 +74,8 @@ function solveLin(A, b) {   // Gaussian elimination with partial pivoting
 
 // ---------- skeleton = spine + thorax ----------
 function buildSkeleton() {
-  const spine = C.build(), thorax = Th.build(spine);
-  return { spine, thorax, els: [...spine.els, ...thorax.els], nSpine: spine.els.length };
+  const spine = C.build(), thorax = Th.build(spine), shoulder = Sh.build(spine, thorax);
+  return { spine, thorax, shoulder, els: [...spine.els, ...thorax.els, ...shoulder.els], nSpine: spine.els.length };
 }
 function makeRig(sk) {
   const spineRig = SR.makeRig(sk.spine);
@@ -90,13 +91,18 @@ function makeRig(sk) {
     const up = ribs.find((x) => x.side === r.side && x.n === r.n - 1);
     return { id: r.id, up: up.id, f: [0.35, 0.55, 0.75, 1].map((f) => [at(r, f), at(up, f)]) };
   });
-  return { spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
+  const shoulder = makeShoulder(sk, els);
+  return { spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, shoulder, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
     restVec: Object.fromEntries(ccs.map((c) => [c.id, c.restVec])) };
 }
 
-const SC = ROM.SC, K = ROM.SETTINGS.conservative;
-const clavLimits = () => ({ elev: [-SC.depression * K, SC.elevation * K], prot: [-SC.retraction * K, SC.protraction * K], rot: [0, SC.posteriorRotation * K] });
-const ZERO_CLAV = () => ({ L: { elev: 0, prot: 0, rot: 0 }, R: { elev: 0, prot: 0, rot: 0 } });
+const SC = ROM.SC, ST = ROM.ST, K = ROM.SETTINGS.conservative;
+const clavLimits = () => ({ elev: [-SC.depression * K, SC.elevation * K], prot: [-SC.retraction * K, SC.protraction * K], rot: [0, SC.posteriorRotation * K],
+  up: [-ST.downwardRotation * K, ST.upwardRotation * K] });
+// pose.clavicle[side] = { elev, prot, up }: the shoulder-girdle controls of one side. elev / prot drive the clavicle at the
+// sternoclavicular joint; up is scapular upward rotation. The clavicle's axial rotation and the scapula's tilt and
+// internal rotation are solved (rot, if present in older poses, is ignored).
+const ZERO_CLAV = () => ({ L: { elev: 0, prot: 0, up: 0 }, R: { elev: 0, prot: 0, up: 0 } });
 const clavZero = (p) => !p || !p.clavicle || ["L", "R"].every((s) => !p.clavicle[s] || Object.values(p.clavicle[s]).every((v) => !v));
 const isZero = (p) => SR.isZero(p) && clavZero(p);
 const ZERO = () => ({ ...SR.ZERO(), clavicle: ZERO_CLAV() });
@@ -105,16 +111,124 @@ const ZERO = () => ({ ...SR.ZERO(), clavicle: ZERO_CLAV() });
 // combined motions share one envelope (as in the spinal rig): |(e, p, r) / limits|_2 <= 1
 function clavSolve(a) {
   const lim = clavLimits(), cl = (v, r) => Math.max(r[0], Math.min(r[1], v || 0));
-  let e = cl(a.elev, lim.elev), p = cl(a.prot, lim.prot), r = cl(a.rot, lim.rot);
-  const n = Math.hypot(e / (e >= 0 ? lim.elev[1] : -lim.elev[0]), p / (p >= 0 ? lim.prot[1] : -lim.prot[0]), r / lim.rot[1]);
-  if (n > 1) { e /= n; p /= n; r /= n; }
-  return { elev: e, prot: p, rot: r, envelope: n, scaled: n > 1 };
+  let e = cl(a.elev, lim.elev), p = cl(a.prot, lim.prot), u = cl(a.up, lim.up);
+  const n = Math.hypot(e / (e >= 0 ? lim.elev[1] : -lim.elev[0]), p / (p >= 0 ? lim.prot[1] : -lim.prot[0]), u / (u >= 0 ? lim.up[1] : -lim.up[0]));
+  if (n > 1) { e /= n; p /= n; u /= n; }
+  return { elev: e, prot: p, up: u, envelope: n, scaled: n > 1 };
 }
-function clavR(side, a, axis) {
-  const q = clavSolve(a), e = q.elev * DEG, p = q.prot * DEG, r = q.rot * DEG;
-  const u = side === "L" ? axis : mv(MIR, axis);                            // rest long axis in left-side terms
-  const RL = mm(ry(-p), mm(rz(e), axisAngle(u, -r)));
+// sternoclavicular rotation for given angles (left side; right mirrored): axial (posterior) rotation about the clavicle's
+// rest axis, then elevation about the AP axis, then protraction about the vertical axis
+function clavRaw(side, e, p, r, axis) {
+  const u = side === "L" ? axis : mv(MIR, axis);
+  const RL = mm(ry(-p * DEG), mm(rz(e * DEG), axisAngle(u, -r * DEG)));
   return side === "L" ? RL : mm(MIR, mm(RL, MIR));
+}
+const clavR = (side, a, axis) => { const q = clavSolve(a); return clavRaw(side, q.elev, q.prot, 0, axis); };
+
+// ---------- shoulder girdle: clavicle + scapula gliding on the rib cage ----------
+// Each scapula hangs from its clavicle at the AC joint and glides over the thoracic surface (rib cage blended into one
+// sheet) at its rest soft-tissue distance. Unknowns per side: extra clavicle elevation, clavicle axial rotation and the
+// three AC rotations. The two medial-border contacts (trigonum spinae, inferior angle) keep their rest gap; the rest of
+// the costal surface may not come closer than ST.softTissueMin. Upward rotation is the user's independent control; the
+// other rotations follow from the contacts with as little AC and clavicle rotation as possible.
+function makeShoulder(sk, els) {
+  const sh = sk.shoulder, glide = sh.glide, out = {};
+  for (const scap of els.filter((e) => e.kind === "scapula")) {
+    const side = scap.side, clav = els.find((e) => e.id === `CLAV_${side}`), lm = scap.landmarks;
+    const toW = (p) => C.toWorld(scap, p);
+    const ant = (p) => [p[0], p[1], p[2] + 1.6];                // costal surface of a medial-border point (local w = anterior)
+    const contacts = ["TS", "AI"].map((k) => toW(ant(lm[k])));
+    // other costal-surface samples: along the medial and lateral borders and across the blade
+    const S = Sh.LM, sg = side === "L" ? 1 : -1, J0 = sh.Fj;
+    const loc = (p) => [sg * (p[0] - J0[0]), p[1] - J0[1], p[2] - J0[2]];
+    const extra = [[7, 46, 0], [2, 24, 0.5], [4, -50, 1], [40, -75, 1.5], [66, -40, 1], [42, -22, 3.5], [32, 42, 1.5], [70, 32, 0], [20, -88, 1]]
+      .map(([u, v, wp]) => toW(ant(loc([u * 1.1, v, -wp]))));
+    // costal-surface samples from the real shape: the points of the scapula nearest the rib cage at rest
+    const sc = C.compile(scap), b = sc.box, shell = [];
+    for (let x = b[0]; x <= b[3]; x += 4) for (let y = b[1]; y <= b[4]; y += 4) for (let z = b[2]; z <= b[5]; z += 4) { const d = sc.sdf(x, y, z); if (d < 0 && d > -4) shell.push(toW([x, y, z])); }
+    const near = shell.map((p) => [p, glide(side, p)]).filter(([, g]) => g < 30).sort((a, b) => a[1] - b[1]);
+    for (let i = 0; i < near.length && extra.length < 32; i += Math.max(1, Math.floor(near.length / 22))) extra.push(near[i][0]);
+    const g0 = contacts.map((p) => glide(side, p)), gx = extra.map((p) => glide(side, p));
+    // acromioclavicular joint: points on the clavicle's lateral end, kept 0.5–3 mm from the acromion
+    const cl = els.find((e) => e.id === `CLAV_${side}`), acPts = Th.tubeSurface(cl.geo.nodes.slice(-3), null, 10);
+    const lmW = Object.fromEntries(["TS", "AA", "SA", "AI"].map((k) => [k, toW(lm[k])]));
+    out[side] = { side, scap, clav, contacts, extra, g0, gx, J: scap.o.slice(), lmW, rest: angleSet(side, lmW, ID()), sc, acPts };
+  }
+  return out;
+}
+function angleSet(side, w, T) {      // clinical angles in the thorax frame T (sternum); right side mirrored onto the left
+  const inv = (p) => { const q = mv(tr(T.R), sub(p, T.t)); return side === "L" ? q : [-q[0], q[1], q[2]]; };
+  return Sh.angles(inv(w.TS), inv(w.AA), inv(w.SA), inv(w.AI));
+}
+const mirT = (T) => ({ R: mm(MIR, mm(T.R, MIR)), t: mv(MIR, T.t) });
+// Both sides are solved by the same left-side problem: the right side's thorax state is mirrored onto the left, solved,
+// and mirrored back. Symmetric inputs therefore give exactly mirrored shoulders.
+function solveShoulder(rig, side, Tst, ribsT, input) {
+  if (side === "L") return solveShoulderL(rig, Tst, ribsT, input);
+  const rm = {}; if (ribsT) for (const id in ribsT) if (id.endsWith("_R")) rm[id.replace(/_R$/, "_L")] = mirT(ribsT[id]);
+  const r = solveShoulderL(rig, mirT(Tst), ribsT ? rm : null, input);
+  return { ...r, Tc: mirT(r.Tc), Ts: mirT(r.Ts) };
+}
+function solveShoulderL(rig, Tst, ribsT, input) {
+  const side = "L";
+  // continuation: large inputs are approached in steps from rest, each step starting from the previous solution,
+  // so the solver follows the gliding path instead of jumping to a distant (unnatural) solution
+  const q0 = clavSolve(input || {}), N = Math.max(1, Math.ceil(Math.max(Math.abs(q0.elev) / 8, Math.abs(q0.prot) / 6, Math.abs(q0.up) / 6)));
+  let x = [0, 0, 0, 0, 0], res = null;
+  for (let s = 1; s <= N; s++) { res = solveShoulderStep(rig, "L", Tst, ribsT, { elev: q0.elev * s / N, prot: q0.prot * s / N, up: q0.up * s / N }, x); x = res.x; }
+  res.input = q0; return res;
+}
+function solveShoulderStep(rig, side, Tst, ribsT, input, x0) {
+  const S = rig.shoulder[side], clav = S.clav, q = clavSolve(input || {}), lim = clavLimits();
+  const glide = rig.sk.shoulder.glide, Rn = (x) => x * DEG;
+  const pose = (x) => {
+    const Tc = comp(Tst, about(clavRaw(side, q.elev + x[0], q.prot, x[1], clav.joint.axis), clav.joint.pivot));
+    const Ts = comp(Tc, about(rotvec([Rn(x[2]), Rn(x[3]), Rn(x[4])]), S.J));
+    return { Tc, Ts };
+  };
+  const wl = (Ts) => Object.fromEntries(Object.entries(S.lmW).map(([k, p]) => [k, app(Ts, p)]));
+  const soft = ST.softTissueMin;
+  const resid = (x, urTarget) => {
+    const { Tc, Ts } = pose(x), r = [];
+    // AC joint space: clavicle end points (moved with the clavicle) in the scapula's frame
+    let acMin = 1e9; const iTs = inv(Ts);
+    for (const p of S.acPts) { const w = app(iTs, app(Tc, p)), l = C.toLocal(S.scap, w), d = S.sc.sdf(l[0], l[1], l[2]); if (d < acMin) acMin = d; }
+    r.push(acMin < 0.5 ? 4 * (0.5 - acMin) : acMin > 3 ? 2 * (acMin - 3) : 0);
+    S.contacts.forEach((p, i) => r.push(2 * (glide(side, app(Ts, p), ribsT) - S.g0[i])));
+    S.extra.forEach((p, i) => { const g = glide(side, app(Ts, p), ribsT), m = Math.min(soft, S.gx[i]); r.push(g < m ? 3 * (m - g) : 0); });
+    if (urTarget != null) r.push(1.5 * (angleSet(side, wl(Ts), Tst).ur - urTarget));
+    const e = q.elev + x[0], over = (v, a, b) => (v < a ? a - v : v > b ? v - b : 0);
+    // clavicle elevation follows the user exactly unless upward rotation asks for more; the clavicle's axial rotation and
+    // the AC rotations are kept as small as the gliding allows
+    r.push((urTarget == null ? 5 : 0.12) * x[0], 0.04 * x[1], 0.08 * x[2], 0.08 * x[3], 0.08 * x[4]);
+    r.push(4 * over(e, lim.elev[0], lim.elev[1]), 4 * over(x[1], -5, lim.rot[1]), 10 * over(Math.hypot(x[2], x[3], x[4]), 0, ST.acRange));
+    return r;
+  };
+  const lm = (x0, urTarget) => {
+    let x = x0.slice(), r = resid(x, urTarget), f = r.reduce((a, v) => a + v * v, 0), mu = 1e-2;
+    for (let it = 0; it < 40; it++) {
+      const J = x.map((_, j) => { const xp = x.slice(); xp[j] += 1e-3; return resid(xp, urTarget).map((v, i) => (v - r[i]) / 1e-3); });
+      const n = x.length, A = Array.from({ length: n }, (_, a) => Array.from({ length: n }, (_, b) => { let s = 0; for (let i = 0; i < r.length; i++) s += J[a][i] * J[b][i]; return s; }));
+      const g = x.map((_, a) => { let s = 0; for (let i = 0; i < r.length; i++) s += J[a][i] * r[i]; return -s; });
+      let acc = false;
+      for (let k = 0; k < 8; k++) {
+        const dx = solveLin(A.map((row, a) => row.map((v, b) => v + (a === b ? mu * (1 + A[a][a]) : 0))), g), xn = x.map((v, i) => v + dx[i]);
+        const rn = resid(xn, urTarget), fn = rn.reduce((a, v) => a + v * v, 0);
+        if (fn < f) { acc = f - fn > 1e-8; x = xn; r = rn; f = fn; mu = Math.max(1e-7, mu / 3); break; } mu *= 4;
+      }
+      if (!acc) break;
+    }
+    return { x, f };
+  };
+  // natural position for this clavicle input (no upward-rotation target), then the user's upward rotation on top of it
+  const xs = x0.slice(); xs[1] = 0;
+  let sol = lm(Math.abs(q.up) > 1e-9 ? [x0[0] * 0, 0, 0, 0, 0] : x0, null);
+  const natural = angleSet(side, wl(pose(sol.x).Ts), Tst).ur;
+  if (Math.abs(q.up) > 1e-9) sol = lm(x0, natural + q.up);
+  const { Tc, Ts } = pose(sol.x), ang = angleSet(side, wl(Ts), Tst);
+  const gaps = [...S.contacts, ...S.extra].map((p) => glide(side, app(Ts, p), ribsT));
+  return { Tc, Ts, x: sol.x, input: q, angles: ang, rest: S.rest, natural, minGap: Math.min(...gaps), contactGap: gaps.slice(0, 2), clavicle: { elev: q.elev + sol.x[0], prot: q.prot, rot: sol.x[1] },
+    ac: Math.hypot(sol.x[2], sol.x[3], sol.x[4]), residual: Math.sqrt(sol.f) };
 }
 
 // Rib-cage solution for given vertebral transforms (delta: id -> T)
@@ -176,20 +290,24 @@ function posedModel(rig, restComps, pose) {
   const els = sp.els.slice(), comps = sp.comps.slice();
   const geo = Th.cartilageGeometry(rig.ribEl, rig.ccDefs, sol);
   const clav = (pose.clavicle) || ZERO_CLAV();
-  const clavT = {};
+  const clavT = {}, girdle = {};
+  for (const side of ["L", "R"]) girdle[side] = solveShoulder(rig, side, sol.sternum, sol.ribs, clav[side]);
   for (let k = nS; k < rig.els.length; k++) {
     const el = rig.els[k];
     if (el.kind === "rib") { const T = sol.ribs[el.id]; els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]); }
     else if (el.kind === "sternum") { const T = sol.sternum; els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]); }
     else if (el.kind === "clavicle") {
-      const T = comp(sol.sternum, about(clavR(el.side, clav[el.side] || {}, el.joint.axis), el.joint.pivot)); clavT[el.id] = T;
+      const T = girdle[el.side].Tc; clavT[el.id] = T;
       els.push({ ...el, R: T.R, o: app(T, el.o), delta: T }); comps.push(restComps[k]);
+    } else if (el.kind === "scapula") {
+      const T = girdle[el.side].Ts;
+      els.push({ ...el, R: mm(T.R, el.R), o: app(T, el.o), delta: T }); comps.push(restComps[k]);
     } else if (el.kind === "cartilage") {
       const g = geo[el.id], pel = { ...el, o: g.nodes[0].p.slice(), geo: g, R: undefined, psi: 0, stretch: g.arc / el.restArc, chordRatio: g.chord / el.restLen };
       els.push(pel); comps.push(C.compile(pel));
     }
   }
-  return { els, comps, solved: sp.solved, neutral: false, thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
+  return { els, comps, solved: sp.solved, neutral: false, girdle, thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
     stretch: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].arc / c.restArc])),
     chord: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].chord / c.restLen])) } };
 }
@@ -197,15 +315,17 @@ function posedModel(rig, restComps, pose) {
 // demonstration poses: the approved spinal demos (unchanged ids) plus clavicle demos for the future shoulder girdle
 function demoPoses() {
   const D = SR.demoPoses().map((d) => ({ ...d, pose: { ...d.pose, clavicle: ZERO_CLAV() } }));
-  const lim = clavLimits(), both = (o) => ({ L: { elev: 0, prot: 0, rot: 0, ...o }, R: { elev: 0, prot: 0, rot: 0, ...o } });
+  const lim = clavLimits(), both = (o) => ({ L: { elev: 0, prot: 0, up: 0, ...o }, R: { elev: 0, prot: 0, up: 0, ...o } });
   const r1 = (v) => Math.round(v * 10) / 10;
   D.push({ id: "shrug", name: "Shrug", pose: { ...SR.ZERO(), clavicle: both({ elev: r1(lim.elev[1]) }) } });
   D.push({ id: "shoulders-back", name: "Shoulders back", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[0] * 0.85), elev: r1(lim.elev[0] * 0.5) }) } });
+  D.push({ id: "reach-forward", name: "Reach forward", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[1]) }) } });
+  D.push({ id: "upward-rotation", name: "Upward rotation", pose: { ...SR.ZERO(), clavicle: both({ up: r1(lim.up[1]) }) } });
   return D;
 }
 // scale every angle of a pose (nested clavicle sides included)
 const scalePose = (p, f) => JSON.parse(JSON.stringify(p), (k, v) => (typeof v === "number" ? v * f : v));
-const API = { demoPoses, scalePose, buildSkeleton, makeRig, posedModel, solveRibcage, clavLimits, clavSolve, clavR, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
+const API = { demoPoses, scalePose, buildSkeleton, makeRig, posedModel, solveRibcage, solveShoulder, clavLimits, clavSolve, clavR, clavRaw, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
 if (NODE) module.exports = API;
 else root.ThoraxRig = API;
 })(typeof self !== "undefined" ? self : this);

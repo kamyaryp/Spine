@@ -91,7 +91,7 @@ function clavCart(m) { const o = {}; for (const s of ["L", "R"]) { const pts = w
 
 // symmetry (rest): every left node mirrored onto its right twin
 let asym = 0;
-for (const e of sk.els.filter((x) => x.side === "L")) {
+for (const e of sk.els.filter((x) => x.side === "L" && x.geo)) {
   const r = sk.els[E[e.id.replace(/_L$/, "_R")]];
   e.geo.nodes.forEach((n, i) => { const q = r.geo.nodes[i].p; asym = Math.max(asym, len(sub([-n.p[0], n.p[1], n.p[2]], q))); });
 }
@@ -124,13 +124,13 @@ props.ribcage.lowestMarginLevel = levelOf(props.ribcage.lowestMargin);
 
 // ---- poses ----
 const lim = TR.clavLimits();
-const clavPose = (o) => ({ ...SR.ZERO(), clavicle: { L: { elev: 0, prot: 0, rot: 0, ...o }, R: { elev: 0, prot: 0, rot: 0, ...o } } });
+const clavPose = (o) => ({ ...SR.ZERO(), clavicle: { L: { elev: 0, prot: 0, up: 0, ...o }, R: { elev: 0, prot: 0, up: 0, ...o } } });
 const POSES = [...SR.demoPoses().map((d) => ({ id: d.id, name: d.name, pose: d.pose })),
   { id: "clav-elevate", name: "Clavicles elevated", pose: clavPose({ elev: lim.elev[1] }) },
   { id: "clav-depress", name: "Clavicles depressed", pose: clavPose({ elev: lim.elev[0] }) },
   { id: "clav-protract", name: "Clavicles protracted", pose: clavPose({ prot: lim.prot[1] }) },
   { id: "clav-retract", name: "Clavicles retracted", pose: clavPose({ prot: lim.prot[0] }) },
-  { id: "clav-rotate", name: "Clavicles rotated posteriorly", pose: clavPose({ rot: lim.rot[1] }) },
+  { id: "clav-rotate", name: "Shoulder blades rotated upward", pose: clavPose({ up: lim.up[1] }) },
   { id: "flex+clav-depress", name: "Flexion + clavicles depressed", pose: { ...SR.demoPoses()[1].pose, clavicle: clavPose({ elev: lim.elev[0], prot: lim.prot[1] }).clavicle } },
 ];
 const att0 = attachments(rest), ov0 = overlaps(rest), cc0 = clavCart(rest);
@@ -180,7 +180,7 @@ const cv = Math.max(...results.map((r) => r.costovertebral));
 pass(cv <= ROM.SETTINGS.ribcage.costovertebralMax + 1e-6, `costovertebral rotation within ±${ROM.SETTINGS.ribcage.costovertebralMax}° (max ${cv.toFixed(1)}°)`);
 pass(results.every((r) => r.sternalInsertion > 0.5 && r.falseJoin > 0.5), `cartilages stay inserted (sternum ≥ ${Math.min(...results.map((r) => r.sternalInsertion)).toFixed(1)} mm, false-rib joins ≥ ${Math.min(...results.map((r) => r.falseJoin)).toFixed(1)} mm)`);
 pass(results.every((r) => r.clavicleRib1 > 0), `clavicles clear rib 1 and its cartilage in every pose (min ${Math.min(...results.map((r) => r.clavicleRib1)).toFixed(1)} mm)`);
-pass(results.every((r) => r.scJoint[0] > 0 && r.scJoint[1] < 4), `sternoclavicular joint space kept (${Math.min(...results.map((r) => r.scJoint[0])).toFixed(1)} … ${Math.max(...results.map((r) => r.scJoint[1])).toFixed(1)} mm)`);
+pass(results.every((r) => r.scJoint[0] > 0 && r.scJoint[1] < 5), `sternoclavicular joint space kept, room for the articular disc (${Math.min(...results.map((r) => r.scJoint[0])).toFixed(1)} … ${Math.max(...results.map((r) => r.scJoint[1])).toFixed(1)} mm)`);
 pass(results.every((r) => r.clavicleSpine > 10), `clavicles never touch the spine (min ${Math.min(...results.map((r) => r.clavicleSpine)).toFixed(0)} mm)`);
 { // neutral: zero input returns the rest skeleton itself; near-zero input stays continuous
   const z = TR.posedModel(rig, comps, TR.ZERO()), eps = TR.posedModel(rig, comps, { ...SR.ZERO(), thoracic: { fe: 1e-6, lb: 0, ar: 0 }, clavicle: { L: { elev: 1e-6, prot: 0, rot: 0 }, R: { elev: 0, prot: 0, rot: 0 } } });

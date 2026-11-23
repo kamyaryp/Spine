@@ -30,6 +30,9 @@ const REFS = {
   whitePanjabi: "White & Panjabi 1990, Clinical Biomechanics of the Spine: representative (largely cadaveric) segmental ranges; used only as a passive upper reference.",
   neumann: "Neumann, Kinesiology of the Musculoskeletal System (3rd ed.): sternoclavicular joint ranges ≈ 45° elevation, 10° depression, 15–20° protraction, 15–30° retraction, 20–35° posterior rotation.",
   ludewig09: "Ludewig et al. 2009, J Bone Joint Surg Am 91(2): in vivo bone-pin kinematics; resting clavicle ≈ 20° retracted and ≈ 6° elevated; with arm elevation it retracts 15–30°, elevates ≈ 10° and rotates posteriorly ≈ 30°.",
+  mcclure01: "McClure et al. 2001, J Shoulder Elbow Surg 10(3): bone-pin 3D scapular kinematics in vivo (8 volunteers). Scapular upward rotation, posterior tilt and external rotation increase with arm elevation; maximum upward rotation ≈ 50° (original ISB axes).",
+  ludewig10: "Ludewig et al. 2010, J Biomech 43(8): ISB scapular axes compared; maximum upward rotation 43 ± 8° (current standard) at maximum arm elevation.",
+  jsesi23: "Cadaveric isolated scapulothoracic motions (JSES International 2023): shrug elevates the clavicle ≈ 25° with ≈ 26° scapular lateral (upward) rotation and ≈ 3° anterior tilt; protraction ≈ +7°, retraction and shrug reduce protraction.",
   wilke17: "Wilke et al. 2017, PLoS One (PMC5453693): in vitro thoracic segments with vs without the rib cage; the rib cage stiffens the segments, most in axial rotation (more than half the range). In vivo values above already include the intact rib cage.",
 };
 
@@ -87,10 +90,18 @@ const SETTINGS = {
 };
 // Sternoclavicular joint: clavicle relative to the manubrium, degrees from the resting position (one direction).
 // Controls reach SETTINGS.conservative of these. Anterior rotation is not modelled (posterior rotation returns to 0).
+// Scapulothoracic gliding (scapula relative to the thorax, on top of the clavicle's motion). Upward rotation is the only
+// independent scapular control; tilt and internal / external rotation are solved so the scapula keeps gliding on the
+// rib cage. Downward rotation below rest is poorly documented in vivo: 10° is an approximation, marked as such.
+// AC joint rotations stay within acRange (bone-pin studies report up to ≈ 15–20° per axis; approximation).
+// Without arms, scapular upward rotation is limited to what the girdle reaches on its own: ≈ 26° in isolated shrugging
+// (jsesi23). The 43–50° reached with full arm elevation (ludewig10, mcclure01) is kept as withArm for the arm stage.
+const ST = { upwardRotation: 26, withArm: 45, downwardRotation: 10, acRange: 25, softTissueMin: 5,
+  refs: ["jsesi23", "ludewig10", "mcclure01", "ludewig09"], approx: "isolated upward rotation from cadaveric shrugging; downward rotation (10°) and AC range (25°) approximate" };
 const SC = { elevation: 45, depression: 10, protraction: 17.5, retraction: 22.5, posteriorRotation: 27.5,
   refs: ["neumann", "ludewig09"], approx: "textbook (largely passive) ranges; mid-points where a range is given" };
 
-const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS, SC };
+const API = { REFS, SEGMENTS, REGIONS, REGION, SETTINGS, SC, ST };
 if (typeof module !== "undefined" && module.exports) module.exports = API;
 else root.SpineROM = API;
 })(typeof self !== "undefined" ? self : this);

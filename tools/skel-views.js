@@ -1,9 +1,9 @@
-// node tools/skel-views.js outDir ss view1 view2 ... -> rest skeleton (spine + thorax) PNGs at 1 mm/px
+// node tools/skel-views.js outDir ss view1 view2 ... -> rest skeleton (spine, thorax, shoulder girdle) PNGs at 1 mm/px
 const fs = require("fs"), path = require("path");
-const S = require("../src/spine-core.js"), Th = require("../src/thorax-core.js"), R = require("../src/spine-render.js"), { encodePNG } = require("./png.js");
+const S = require("../src/spine-core.js"), TR = require("../src/thorax-rig.js"), R = require("../src/spine-render.js"), { encodePNG } = require("./png.js");
 const out = process.argv[2] || "out", ss = +(process.argv[3] || 3), only = process.argv.slice(4);
 fs.mkdirSync(out, { recursive: true });
-const sp = S.build(), th = Th.build(sp), els = [...sp.els, ...th.els];
+const els = TR.buildSkeleton().els;
 const model = { els, comps: els.map(S.compile) };
 for (const v of [...R.VIEWS, { id: "top", yaw: 0, pitch: 90 }]) {
   if (only.length && !only.includes(v.id)) continue;

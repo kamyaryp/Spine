@@ -40,6 +40,17 @@ out.thorax = {
     joint: e.joint ? Object.fromEntries(Object.entries(e.joint).map(([k, v]) => [k, Array.isArray(v) ? r1v(v) : v])) : undefined,
     landmarks: e.landmarks ? Object.fromEntries(Object.entries(e.landmarks).map(([k, v]) => [k, r1v(v)])) : undefined,
     restArcLength: e.restArc ? r1(e.restArc) : undefined })),
-  demos: TR.demoPoses().filter((d) => d.id === "shrug" || d.id === "shoulders-back"),
+  demos: [],
+};
+// shoulder girdle: scapulae on the clavicles, gliding on the rib cage
+const SRig = TR.makeRig(sk), Cc = require("../src/spine-core.js");
+out.shoulder = {
+  about: "Scapulae hang from the clavicles at the AC joint and glide over the rib cage (soft-tissue gap); no bony joint with ribs or spine.",
+  controls: "pose.clavicle[side] = { elev, prot, up }: clavicle elevation and protraction (sternoclavicular), scapular upward rotation; clavicle axial rotation and scapular tilt / internal rotation are solved",
+  limitsDeg: TR.clavLimits(), scapulothoracic: ROM.ST,
+  elements: sk.shoulder.els.map((e) => ({ id: e.id, name: e.name, side: e.side, parent: e.joint.parent, acJoint: r1v(e.o),
+    landmarksWorld: Object.fromEntries(Object.entries(e.landmarks).map(([k, p]) => [k, r1v(Cc.toWorld(e, p))])),
+    glenoid: { centre: r1v(Cc.toWorld(e, e.glenoid.c)), normalWorld: e.R.map((row) => r3(row[0] * e.glenoid.n[0] + row[1] * e.glenoid.n[1] + row[2] * e.glenoid.n[2])) }, restAngles: SRig.shoulder[e.side].rest })),
+  demos: TR.demoPoses().filter((d) => ["shrug", "shoulders-back", "reach-forward", "upward-rotation"].includes(d.id)),
 };
 const f = process.argv[2] || "spine-rig.json"; fs.writeFileSync(f, JSON.stringify(out, null, 1)); console.log("wrote", f, elements.length, "spine elements,", segments.length, "segments,", out.thorax.elements.length, "thorax elements");

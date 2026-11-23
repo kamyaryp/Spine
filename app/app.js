@@ -26,13 +26,15 @@ const SLOT = ["outline", "line", "shade", "mid", "light", "hi"];
 const BGS = { neutral: ["Neutral", "#2a2f35"], checker: ["Transparent", null], dark: ["Dark", "#121417"], light: ["Light", "#eef0f2"], skin: ["Skin", "#c99a7c"] };
 const PART_COLORS = { 1: "#d9a441", 2: "#5aa6c9", 3: "#8b7fd1", 4: "#5fb38a", 5: "#d9708a", 6: "#c98b5a", 7: "#7c9cd9", 8: "#e0605a", 9: "#59b7c9",
   10: "#a87fc9", 11: "#c9c25a", 12: "#a7b2b0", 13: "#b59a72", 14: "#e3b98f", 15: "#c7a5c9", 16: "#e89a4f", 17: "#6fcf9a", 18: "#d9a441", 19: "#3a3330",
-  20: "#e0605a", 21: "#e89a4f", 22: "#c9c25a", 23: "#d9b98a", 24: "#a7b2b0", 25: "#59b7c9", 26: "#5aa6c9", 27: "#8b7fd1", 28: "#6fcf9a", 29: "#5fb38a", 30: "#c7a5c9" };
+  20: "#e0605a", 21: "#e89a4f", 22: "#c9c25a", 23: "#d9b98a", 24: "#a7b2b0", 25: "#59b7c9", 26: "#5aa6c9", 27: "#8b7fd1", 28: "#6fcf9a", 29: "#5fb38a", 30: "#c7a5c9",
+  31: "#7c9cd9", 32: "#5fb38a", 33: "#d9a441", 34: "#e0605a", 35: "#c98b5a", 36: "#a87fc9", 37: "#59b7c9", 38: "#6fcf9a", 39: "#e89a4f", 40: "#c9c25a", 41: "#d9708a", 42: "#8b7fd1" };
 const REGION_COLORS = { cervical: "#d9a441", thoracic: "#5aa6c9", lumbar: "#8b7fd1", sacral: "#5fb38a", coccygeal: "#d9708a", disc: "#a7b2b0",
-  ribcage: "#e3b98f", cartilage: "#cfd8d4", sternum: "#e0605a", clavicle: "#6fcf9a" };
-const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Discs", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicles" };
+  ribcage: "#e3b98f", cartilage: "#cfd8d4", sternum: "#e0605a", clavicle: "#6fcf9a", scapula: "#c9c25a" };
+const REGION_NAMES = { cervical: "Cervical", thoracic: "Thoracic", lumbar: "Lumbar", sacral: "Sacral", coccygeal: "Coccygeal", disc: "Discs", ribcage: "Ribs", cartilage: "Costal cartilage", sternum: "Sternum", clavicle: "Clavicles", scapula: "Scapulae" };
 const DEMO_NAMES = { neutral: "Neutral", flexion: "Bend forward", extension: "Bend back", "bend-left": "Side bend left", "bend-right": "Side bend right",
-  "rotate-left": "Twist left", "rotate-right": "Twist right", combined: "Combined", shrug: "Shrug", "shoulders-back": "Shoulders back" };
-const REGIONS = [["cervical", "Neck"], ["thoracic", "Upper back"], ["lumbar", "Lower back"], ["clavicle", "Clavicles"]];
+  "rotate-left": "Twist left", "rotate-right": "Twist right", combined: "Combined", shrug: "Shrug", "shoulders-back": "Shoulder blades back",
+  "reach-forward": "Reach forward", "upward-rotation": "Upward rotation" };
+const REGIONS = [["cervical", "Neck"], ["thoracic", "Upper back"], ["lumbar", "Lower back"], ["clavicle", "Shoulders"]];
 const LOOK = { lightDir: 136, lightFront: 32, ambient: 0.16, aoStr: 1, exposure: 1, outline: true, lines: true, gap: 3, rim: true, clusters: true, mm: 1, bg: "neutral",
   bone6: PRESETS["Study bone (approved)"], disc6: R.PALETTES.disc, preset: "Study bone (approved)" };
 const DEFAULTS = { tab: "skeleton", view: "front", side: "R", zoom: "fit", labels: false, guides: false, colorby: "none",
@@ -51,8 +53,8 @@ const save = () => { try { localStorage.setItem(KEY, JSON.stringify(S)); } catch
 const sk = TR.buildSkeleton();
 const full = { els: sk.els, comps: sk.els.map(C.compile) };
 const rig = TR.makeRig(sk);
-const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" ? "clavicles" : "spine");
-const normPose = (p) => { const z = TR.ZERO(); p = p || {}; for (const k of [...ROM.REGIONS, "root"]) z[k] = { ...z[k], ...(p[k] || {}) }; for (const s of ["L", "R"]) z.clavicle[s] = { ...z.clavicle[s], ...((p.clavicle || {})[s] || {}) }; return z; };
+const layerOf = (el) => (["rib", "cartilage", "sternum"].includes(el.kind) ? "ribcage" : el.kind === "clavicle" || el.kind === "scapula" ? "clavicles" : "spine");
+const normPose = (p) => { const z = TR.ZERO(); p = p || {}; for (const k of [...ROM.REGIONS, "root"]) z[k] = { ...z[k], ...(p[k] || {}) }; for (const s of ["L", "R"]) { const c = (p.clavicle || {})[s] || {}; for (const k of ["elev", "prot", "up"]) z.clavicle[s][k] = +c[k] || 0; } return z; };
 const poseKey = (p) => JSON.stringify(normPose(p));
 S.pose = normPose(S.pose);
 if (S.sacrumFixed) S.pose.root = { tilt: 0, obliquity: 0, rotation: 0 };
@@ -68,7 +70,7 @@ const viewSpec = (m, id, mm) => { const W = Math.round(m.frameMM / mm); return {
 const visible = () => full.els.map((e, k) => (S.layers[layerOf(e)] ? k : -1)).filter((k) => k >= 0);
 
 // ---------- workers ----------
-const SRC = ["core-src", "rom-src", "rig-src", "thorax-src", "thorax-rig-src", "render-src"].map((id) => $(id).textContent).join("\n") + `
+const SRC = ["core-src", "rom-src", "rig-src", "thorax-src", "shoulder-src", "thorax-rig-src", "render-src"].map((id) => $(id).textContent).join("\n") + `
   let SK = null, FULL = null, RIGW = null;
   function full() { if (!FULL) { SK = ThoraxRig.buildSkeleton(); FULL = { els: SK.els, comps: SK.els.map(SpineCore.compile) }; RIGW = ThoraxRig.makeRig(SK); } return FULL; }
   self.onmessage = (ev) => {
@@ -311,19 +313,19 @@ function buildRegion() {
     const env = document.createElement("p"); env.className = "hint"; env.id = "env-note"; box.appendChild(env);
   } else {
     const ck = document.createElement("label"); ck.className = "check"; ck.htmlFor = "clav-link";
-    ck.innerHTML = `<input type="checkbox" id="clav-link"> Move both clavicles together`; box.appendChild(ck);
+    ck.innerHTML = `<input type="checkbox" id="clav-link"> Move both shoulders together`; box.appendChild(ck);
     const inp = ck.querySelector("input"); inp.checked = S.clavLink;
     inp.addEventListener("change", () => { S.clavLink = inp.checked; if (S.clavLink) { S.pose.clavicle.R = { ...S.pose.clavicle.L }; onPose(); } save(); buildRegion(); });
     const L = TR.clavLimits();
     for (const side of S.clavLink ? ["L"] : ["L", "R"]) {
-      if (!S.clavLink) { const h = document.createElement("div"); h.className = "sub"; h.textContent = side === "L" ? "Left clavicle" : "Right clavicle"; box.appendChild(h); }
+      if (!S.clavLink) { const h = document.createElement("div"); h.className = "sub"; h.textContent = side === "L" ? "Left shoulder" : "Right shoulder"; box.appendChild(h); }
       const setC = (ax) => (v) => { S.pose.clavicle[side][ax] = v; if (S.clavLink) S.pose.clavicle.R[ax] = v; onPose(); };
       regionSliders.push(slider(box, { id: `c-${side}-elev`, label: "Raise / lower", min: L.elev[0].toFixed(1), max: L.elev[1].toFixed(1), ends: ["lower", "raise"],
         get: () => S.pose.clavicle[side].elev, set: setC("elev"), fmt: (v) => deg(v, "down", "up") }));
       regionSliders.push(slider(box, { id: `c-${side}-prot`, label: "Forward / back", min: L.prot[0].toFixed(1), max: L.prot[1].toFixed(1), ends: ["back", "forward"],
         get: () => S.pose.clavicle[side].prot, set: setC("prot"), fmt: (v) => deg(v, "back", "forward") }));
-      regionSliders.push(slider(box, { id: `c-${side}-rot`, label: "Roll back", min: L.rot[0].toFixed(1), max: L.rot[1].toFixed(1), ends: ["none", "full"],
-        get: () => S.pose.clavicle[side].rot, set: setC("rot"), fmt: (v) => deg(v, "", "back") }));
+      regionSliders.push(slider(box, { id: `c-${side}-up`, label: "Shoulder blade rotation", min: L.up[0].toFixed(1), max: L.up[1].toFixed(1), ends: ["downward", "upward"],
+        get: () => S.pose.clavicle[side].up, set: setC("up"), fmt: (v) => deg(v, "downward", "upward") }));
     }
     const env = document.createElement("p"); env.className = "hint"; env.id = "env-note"; box.appendChild(env);
   }
@@ -349,7 +351,7 @@ function syncPose() {
   const env = $("env-note");
   if (env) {
     if (S.region === "clavicle") { const q = TR.clavSolve(S.pose.clavicle.L), q2 = TR.clavSolve(S.pose.clavicle.R), e = Math.max(q.envelope, q2.envelope);
-      env.textContent = e ? `Using ${Math.round(Math.min(1, e) * 100)} % of the clavicles' combined range${q.scaled || q2.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
+      env.textContent = e ? `Using ${Math.round(Math.min(1, e) * 100)} % of the shoulders' combined range${q.scaled || q2.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
     else { const r = SR.solve(S.pose).regions[S.region]; env.textContent = r.envelope ? `Using ${Math.round(Math.min(1, r.envelope) * 100)} % of this region's combined range${r.scaled ? " (scaled back to stay in range)" : ""}.` : ""; }
   }
 }
@@ -450,7 +452,7 @@ function syncLook() {
 function updateTech() {
   const sol = SR.solve(S.pose), pc = (e) => (e ? `${Math.round(Math.min(1, e) * 100)} %${e > 1 ? " (scaled)" : ""}` : "0 %");
   const q = ["L", "R"].map((s) => TR.clavSolve(S.pose.clavicle[s]));
-  $("envelopes").innerHTML = [["Neck", sol.regions.cervical.envelope], ["Upper back", sol.regions.thoracic.envelope], ["Lower back", sol.regions.lumbar.envelope], ["Clavicle left", q[0].envelope], ["Clavicle right", q[1].envelope]]
+  $("envelopes").innerHTML = [["Neck", sol.regions.cervical.envelope], ["Upper back", sol.regions.thoracic.envelope], ["Lower back", sol.regions.lumbar.envelope], ["Shoulder left", q[0].envelope], ["Shoulder right", q[1].envelope]]
     .map(([n, e]) => `<dt>${n}</dt><dd>${pc(e)}</dd>`).join("");
   const th = model.thorax;
   if (!th) $("ribcage").innerHTML = `<dt>State</dt><dd>at rest</dd>`;
@@ -459,12 +461,19 @@ function updateTech() {
     $("ribcage").innerHTML = `<dt>Costovertebral rotation, max</dt><dd>${cv.toFixed(1)}°</dd><dt>Cartilage end distance</dt><dd>${(Math.min(...ch) * 100).toFixed(1)}–${(Math.max(...ch) * 100).toFixed(1)} %</dd>
       <dt>Cartilage length, max</dt><dd>${(Math.max(...ar) * 100).toFixed(1)} %</dd><dt>Sternum fit residual</dt><dd>${th.residual.toFixed(2)}</dd>`;
   }
+  const gd = model.girdle, rs = rig.shoulder, f1 = (v) => (v >= 0 ? "+" : "") + v.toFixed(1) + "°";
+  const ga = (side) => (gd ? gd[side].angles : rs[side].rest);
+  $("girdle").innerHTML = [["Internal rotation", (a) => a.ir], ["Upward rotation", (a) => a.ur], ["Anterior tilt", (a) => a.tilt]]
+    .map(([n, fn]) => `<dt>${n}</dt><dd>${f1(fn(ga("L")))} / ${f1(fn(ga("R")))}</dd>`).join("") +
+    (gd ? `<dt>Clavicle elev · prot · axial</dt><dd>${["L", "R"].map((sd) => [gd[sd].clavicle.elev, gd[sd].clavicle.prot, gd[sd].clavicle.rot].map((v) => v.toFixed(0)).join(" · ")).join(" / ")}</dd>
+      <dt>AC joint rotation</dt><dd>${gd.L.ac.toFixed(1)}° / ${gd.R.ac.toFixed(1)}°</dd><dt>Scapula–rib gap, min</dt><dd>${gd.L.minGap.toFixed(1)} / ${gd.R.minGap.toFixed(1)} mm</dd>
+      <dt>Upward rotation asked · reached</dt><dd>${["L", "R"].map((sd) => `${gd[sd].input.up.toFixed(0)} · ${(gd[sd].angles.ur - gd[sd].natural).toFixed(0)}`).join(" / ")}</dd>` : `<dt>State</dt><dd>at rest</dd>`);
   const rows = ROM.SEGMENTS.map((s) => { const a = sol.segments[s.id], c = Math.max(Math.abs(a.fe) / (a.fe >= 0 ? s.cap.flex : s.cap.ext), Math.abs(a.lb) / s.cap.lb, Math.abs(a.ar) / s.cap.ar);
     return `<tr><td>${s.id}</td><td>${a.fe.toFixed(1)}</td><td>${a.lb.toFixed(1)}</td><td>${a.ar.toFixed(1)}</td><td>${Math.round(c * 100)}%</td></tr>`; }).join("");
   $("seg-table").innerHTML = `<table><tr><th>Segment</th><th>Flex</th><th>Bend L</th><th>Rot L</th><th>of cap</th></tr>${rows}</table>`;
   const n = (k) => full.els.filter((e) => e.kind === k).length;
   $("model-info").innerHTML = `<dt>Subject</dt><dd>female, 183 cm, 78 kg</dd><dt>Elements</dt><dd>${full.els.length}</dd><dt>Vertebrae, discs</dt><dd>24 + S + Co, ${n("disc")}</dd>
-    <dt>Ribs, cartilages</dt><dd>${n("rib")}, ${n("cartilage")}</dd><dt>Sternum, clavicles</dt><dd>${n("sternum")}, ${n("clavicle")}</dd>
+    <dt>Ribs, cartilages</dt><dd>${n("rib")}, ${n("cartilage")}</dd><dt>Sternum, clavicles, scapulae</dt><dd>${n("sternum")}, ${n("clavicle")}, ${n("scapula")}</dd>
     <dt>Frame</dt><dd>${st ? `${st.W} × ${st.H} px` : ""} at ${S.mm} mm/px</dd>`;
 }
 
