@@ -17,6 +17,7 @@ const C = NODE ? require("./spine-core.js") : root.SpineCore;
 const Th = NODE ? require("./thorax-core.js") : root.ThoraxCore;
 const SR = NODE ? require("./spine-rig.js") : root.SpineRig;
 const Sh = NODE ? require("./shoulder-core.js") : root.ShoulderCore;
+const Pv = NODE ? require("./pelvis-core.js") : root.PelvisCore;
 const ROM = NODE ? require("./spine-rom.js") : root.SpineROM;
 const DEG = Math.PI / 180;
 
@@ -74,8 +75,8 @@ function solveLin(A, b) {   // Gaussian elimination with partial pivoting
 
 // ---------- skeleton = spine + thorax ----------
 function buildSkeleton() {
-  const spine = C.build(), thorax = Th.build(spine), shoulder = Sh.build(spine, thorax);
-  return { spine, thorax, shoulder, els: [...spine.els, ...thorax.els, ...shoulder.els], nSpine: spine.els.length };
+  const spine = C.build(), thorax = Th.build(spine), shoulder = Sh.build(spine, thorax), pelvis = Pv.build(spine);
+  return { spine, thorax, shoulder, pelvis, els: [...spine.els, ...thorax.els, ...shoulder.els, ...pelvis.els], nSpine: spine.els.length };
 }
 function makeRig(sk) {
   const spineRig = SR.makeRig(sk.spine);
@@ -92,7 +93,7 @@ function makeRig(sk) {
     return { id: r.id, up: up.id, f: [0.35, 0.55, 0.75, 1].map((f) => [at(r, f), at(up, f)]) };
   });
   const shoulder = makeShoulder(sk, els);
-  return { spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, shoulder, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
+  return { attachRest: attachments(els), spineRig, sk, els, byId, ribs, ribEl, ccs, ccDefs, st, solved, links, shoulder, restLen: Object.fromEntries(ccs.map((c) => [c.id, c.restLen])),
     restVec: Object.fromEntries(ccs.map((c) => [c.id, c.restVec])) };
 }
 
@@ -105,7 +106,32 @@ const clavLimits = () => ({ elev: [-SC.depression * K, SC.elevation * K], prot: 
 const ZERO_CLAV = () => ({ L: { elev: 0, prot: 0, up: 0 }, R: { elev: 0, prot: 0, up: 0 } });
 const clavZero = (p) => !p || !p.clavicle || ["L", "R"].every((s) => !p.clavicle[s] || Object.values(p.clavicle[s]).every((v) => !v));
 const isZero = (p) => SR.isZero(p) && clavZero(p);
-const ZERO = () => ({ ...SR.ZERO(), clavicle: ZERO_CLAV() });
+// pose.root = whole pelvis (tilt, obliquity, rotation about the hip axis: spine, sacrum and both hip bones together, applied
+// once at the root) + the small relative movements at the pelvic joints: nutation (sacrum against both hip bones) and
+// counter (antagonistic rotation of the hip bones against the sacrum, + = left hip bone posterior).
+const ZERO = () => { const z = { ...SR.ZERO(), clavicle: ZERO_CLAV() }; z.root = { ...z.root, nutation: 0, counter: 0 }; return z; };
+const pelvisLimits = () => ({ tilt: ROM.SETTINGS.root.tilt, obliquity: ROM.SETTINGS.root.obliquity, rotation: ROM.SETTINGS.root.rotation, nutation: Pv.ROM.nutation, counter: Pv.ROM.counter });
+// halfway between two rigid transforms (joint cartilage that belongs to both bones)
+function halfway(A, B, p) {
+  const Rr = mm(tr(A.R), B.R), c = Math.max(-1, Math.min(1, (Rr[0][0] + Rr[1][1] + Rr[2][2] - 1) / 2)), a = Math.acos(c);
+  let H = I3();
+  if (a > 1e-9) { const s2 = 2 * Math.sin(a), k = [(Rr[2][1] - Rr[1][2]) / s2, (Rr[0][2] - Rr[2][0]) / s2, (Rr[1][0] - Rr[0][1]) / s2]; H = axisAngle(k, a / 2); }
+  const pa = app(A, p), pb = app(B, p), o = pa.map((v, i) => (v + pb[i]) / 2), R = mm(A.R, H);
+  return { R, t: o.map((v, i) => v - mv(R, p)[i]) };
+}
+// attachment frames for the parts that are not built yet (femurs, humeri, head): origin + axes in world space
+function attachments(els) {
+  const E = Object.fromEntries(els.map((e) => [e.id, e])), out = {};
+  const Rof = (e) => e.R || rx(e.psi || 0), W = (e, l) => mv(Rof(e), l).map((v, i) => v + e.o[i]);
+  for (const s of ["L", "R"]) {
+    const h = E[`HIP_${s}`], R = Rof(h), mirN = s === "L" ? Pv.ACET_N : [-Pv.ACET_N[0], Pv.ACET_N[1], Pv.ACET_N[2]];
+    out[`HIP_${s}`] = { parent: h.id, child: `FEMUR_${s} (not built)`, o: h.o.slice(), axis: mv(R, mirN), x: mv(R, [1, 0, 0]), y: mv(R, [0, 1, 0]), z: mv(R, [0, 0, 1]), radius: Pv.PELVIS.socketR };
+    const sc = E[`SCAP_${s}`]; if (sc) { const Rs = Rof(sc); out[`SHOULDER_${s}`] = { parent: sc.id, child: `HUMERUS_${s} (not built)`, o: W(sc, sc.glenoid.c), axis: mv(Rs, sc.glenoid.n) }; }
+  }
+  const c1 = E.C1; if (c1) { const R = Rof(c1); out.HEAD = { parent: "C1", child: "SKULL (not built): occipital condyles on the atlas", o: W(c1, [0, c1.hc / 2, 0]), y: mv(R, [0, 1, 0]), z: mv(R, [0, 0, 1]) }; }
+  const hy = E.HYOID; if (hy) out.HYOID = { parent: "none (suspended)", follows: hy.follows, o: hy.o.slice() };
+  return out;
+}
 
 // sternoclavicular rotation (left side; the right side is mirrored) about the joint centre
 // combined motions share one envelope (as in the spinal rig): |(e, p, r) / limits|_2 <= 1
@@ -283,8 +309,19 @@ function solveRibcage(rig, delta) {
 // Posed skeleton. Spine through SpineRig.posedModel (unchanged); thorax follows.
 function posedModel(rig, restComps, pose) {
   const nS = rig.sk.nSpine;
-  if (isZero(pose)) return { els: rig.els, comps: restComps, solved: SR.solve(SR.ZERO()), neutral: true, thorax: null };
+  if (isZero(pose)) return { els: rig.els, comps: restComps, solved: SR.solve(SR.ZERO()), neutral: true, thorax: null, attach: rig.attachRest };
   const sp = SR.posedModel(rig.spineRig, restComps.slice(0, nS), pose);
+  // pelvis: the whole-pelvis transform Pw is the spine rig's root (sacrum about the hip axis) — applied once. Nutation
+  // turns the sacrum (and the whole spine above it) relative to both hip bones about the transverse sacroiliac axis.
+  const rp = pose.root || {}, Pw = (sp.els.find((e) => e.id === "S") || {}).delta || ID();
+  const ax = rig.sk.pelvis.siAxis.o, nut = Math.max(-Pv.ROM.nutation, Math.min(Pv.ROM.nutation, rp.nutation || 0));
+  const ctr = Math.max(-Pv.ROM.counter, Math.min(Pv.ROM.counter, rp.counter || 0));
+  if (nut) {
+    const Wn = comp(Pw, comp(about(rx(nut * DEG), ax), inv(Pw)));
+    sp.els = sp.els.map((e) => ({ ...e, R: mm(Wn.R, e.R || rx(e.psi || 0)), o: app(Wn, e.o), ...(e.delta ? { delta: comp(Wn, e.delta) } : {}) }));
+  }
+  const Ssac = sp.els.find((e) => e.id === "S").delta || ID();
+  const hipT = { L: comp(Pw, about(rx(-ctr * DEG), [Pv.SIJ_C[0], ax[1], ax[2]])), R: comp(Pw, about(rx(ctr * DEG), [-Pv.SIJ_C[0], ax[1], ax[2]])) };
   const delta = {}; sp.els.forEach((e) => { if (e.delta) delta[e.id] = e.delta; });
   const sol = solveRibcage(rig, delta);
   const els = sp.els.slice(), comps = sp.comps.slice();
@@ -302,12 +339,17 @@ function posedModel(rig, restComps, pose) {
     } else if (el.kind === "scapula") {
       const T = girdle[el.side].Ts;
       els.push({ ...el, R: mm(T.R, el.R), o: app(T, el.o), delta: T }); comps.push(restComps[k]);
+    } else if (el.kind === "hip" || el.kind === "joint" || el.kind === "hyoid") {
+      const T = el.kind === "hip" ? hipT[el.side] : el.kind === "hyoid" ? delta[el.follows] || ID()
+        : el.joint === "symphysis" ? halfway(hipT.L, hipT.R, el.o) : halfway(Ssac, hipT[el.side], el.o);
+      els.push({ ...el, R: mm(T.R, el.R), o: app(T, el.o), delta: T }); comps.push(restComps[k]);
     } else if (el.kind === "cartilage") {
       const g = geo[el.id], pel = { ...el, o: g.nodes[0].p.slice(), geo: g, R: undefined, psi: 0, stretch: g.arc / el.restArc, chordRatio: g.chord / el.restLen };
       els.push(pel); comps.push(C.compile(pel));
     }
   }
-  return { els, comps, solved: sp.solved, neutral: false, girdle, thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
+  const pelvis = { whole: { tilt: rp.tilt || 0, obliquity: rp.obliquity || 0, rotation: rp.rotation || 0 }, nutation: nut, counter: ctr };
+  return { els, comps, solved: sp.solved, neutral: false, girdle, pelvis, attach: attachments(els), thorax: { theta: sol.theta, residual: sol.residual, sternum: sol.sternum, clavicles: clavT,
     stretch: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].arc / c.restArc])),
     chord: Object.fromEntries(rig.ccs.map((c) => [c.id, geo[c.id].chord / c.restLen])) } };
 }
@@ -321,11 +363,16 @@ function demoPoses() {
   D.push({ id: "shoulders-back", name: "Shoulders back", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[0] * 0.85), elev: r1(lim.elev[0] * 0.5) }) } });
   D.push({ id: "reach-forward", name: "Reach forward", pose: { ...SR.ZERO(), clavicle: both({ prot: r1(lim.prot[1]) }) } });
   D.push({ id: "upward-rotation", name: "Upward rotation", pose: { ...SR.ZERO(), clavicle: both({ up: r1(lim.up[1]) }) } });
+  // controlled pelvic tilts: the pelvis tilts about the hip axis while the lumbar spine compensates by the same angle,
+  // so the trunk above stays upright (exactly: lumbar flexion = −tilt keeps T12 level). Pelvic-joint motion stays zero.
+  const pt = (id, name, t) => { const p = ZERO(); p.root.tilt = t; p.lumbar.fe = -t; return { id, name, pose: p }; };
+  D.push(pt("pelvic-tilt-anterior", "Pelvic tilt forward", 10), pt("pelvic-tilt-posterior", "Pelvic tilt back", -10));
+  D.forEach((d) => { d.pose.root = { nutation: 0, counter: 0, ...d.pose.root }; });
   return D;
 }
 // scale every angle of a pose (nested clavicle sides included)
 const scalePose = (p, f) => JSON.parse(JSON.stringify(p), (k, v) => (typeof v === "number" ? v * f : v));
-const API = { demoPoses, scalePose, buildSkeleton, makeRig, posedModel, solveRibcage, solveShoulder, clavLimits, clavSolve, clavR, clavRaw, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
+const API = { demoPoses, scalePose, attachments, pelvisLimits, halfway, buildSkeleton, makeRig, posedModel, solveRibcage, solveShoulder, clavLimits, clavSolve, clavR, clavRaw, ZERO, ZERO_CLAV, isZero, clavZero, kabsch };
 if (NODE) module.exports = API;
 else root.ThoraxRig = API;
 })(typeof self !== "undefined" ? self : this);

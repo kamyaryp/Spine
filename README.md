@@ -11,17 +11,17 @@ The lab has exactly three tabs:
 
 | Tab | Status | What it shows |
 |---|---|---|
-| **Skeleton** | spine, rig, rib cage, clavicles approved; scapulae awaiting review | the assembled skeleton: C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs, 12 rib pairs with their costal cartilages, sternum, both clavicles and both scapulae |
+| **Skeleton** | spine, rig, rib cage, clavicles approved; scapulae, pelvis and hyoid awaiting review | the complete trunk skeleton: C1–C7, T1–T12, L1–L5, sacrum, coccyx, 23 discs, 12 rib pairs with their costal cartilages, sternum, both clavicles, both scapulae, both hip bones with the sacroiliac joints and pubic symphysis, and the hyoid. Skull, face and limbs are not built yet |
 | **Body** | not started | muscle and soft tissue around the skeleton (weight is accounted for here) |
 | **Clothing** | not started | close-fitting garments following the body |
 
 The Skeleton tab is built around one workflow: view the character → choose an angle → pick or adjust a movement → play it → export.
 
 - **Preview first.** The preview takes most of the window. Above it: Front, ¾, Side, Back and ¾ back, a Right / Left switch for the side of the body facing the camera, a small top-down compass, and zoom (Fit, −, +). Fit always fits the whole frame, below 1× when needed (crisp whole-number zoom from 1× up). Below it: Play / Pause (Space) and Reset pose.
-- **Movement.** Presets first. *Adjust pose* (collapsed) has Neck, Upper back, Lower back and Shoulders, each with plain controls (Bend forward / back, Bend sideways, Twist; Raise / lower, Forward / back, Shoulder blade rotation) and the angle beside each. Both shoulders move together unless unlinked. The pelvis (sacrum) sits in an advanced subsection and stays fixed by default.
-- **Visibility** (collapsed): spine, rib cage, clavicles, anatomical labels, centre guides, diagnostic colouring. Labels and guides start off.
+- **Movement.** Presets first (spinal, shoulder and two controlled pelvic tilts). *Adjust pose* (collapsed) has Neck, Upper back, Lower back, Shoulders and Pelvis, each with plain controls (Bend forward / back, Bend sideways, Twist; Raise / lower, Forward / back, Shoulder blade rotation; Tilt, Hip hike, Turn) and the angle beside each. Both shoulders move together unless unlinked. The pelvis has a small *Advanced: pelvic joints* subsection (sacroiliac nutation, hip bone counter-rotation).
+- **Visibility** (collapsed): spine, rib cage, shoulder girdle, pelvis, hyoid, anatomical labels, centre guides, diagnostic colouring. Labels and guides start off.
 - **Appearance** (collapsed): palette presets and custom colours, background, pixel detail (mm per pixel, independent of zoom), lighting, pixel rules, style JSON, and *Reset appearance*, which resets only these.
-- **Technical details** (collapsed): range-of-motion envelopes, rib-cage response, segment angles, how movement works.
+- **Technical details** (collapsed): range-of-motion envelopes, rib-cage response, shoulder girdle, pelvis (pose, joint spaces, hip joint centres), segment angles, how movement works.
 - **Export:** *Artwork PNG* is the clean sprite (transparent, palette colours, 1 px per pixel, no labels, guides or diagnostic colours). *Preview PNG* is exactly what the preview shows, at 2×.
 - **Narrow screens:** the preview comes first and stays pinned while the settings scroll below it.
 
@@ -102,6 +102,23 @@ Added on top of the approved spine, rib cage, sternum and clavicles; none of the
 |---|---|
 | `node tools/shoulder-check.js [--json out.json]` | scapula IDs, AC connection, rib-cage clearance, gliding contact, symmetry, proportions, limits, neutral restoration, in every spinal and shoulder demonstration and in combined poses |
 
+## Pelvis and hyoid
+
+Added around the approved sacrum and coccyx (unchanged) and the approved hip axis and posture (pelvic incidence ≈ 53°, sacral slope 41°, pelvic tilt 12°).
+
+- **Hip bones:** `HIP_L`, `HIP_R`, mirror images, each the fused ilium, ischium and pubis: iliac crest with tubercle, ASIS and AIIS, iliac fossa, gluteal surface, auricular surface and iliac tuberosity, PSIS and PIIS, greater sciatic notch, arcuate line (pelvic brim), acetabulum (lunate surface, fossa, notch, rim), superior and inferior pubic rami, pubic body and tubercle, obturator foramen (open), ischial body, spine, tuberosity and ramus. Hover names each region. The local frame of each bone has its origin at the acetabulum centre, the future hip joint.
+- **Measured on the built surfaces** (`tools/pelvis-check.js`; female references, scaled for 183 cm where stature matters): inlet transverse 129 mm (127–135), obstetric conjugate 118 mm (115–127), interspinous 108 mm (107–110), intertuberous 111 mm (111–118), subpubic angle 85° (85–95), symphysis height 42 mm, interpubic gap 4.4 mm (4–5), inter-ASIS 242 mm, intercristal 278 mm, crest summit at the L4–L5 interspace, hip bone height 226 mm (≈ 200 at 163 cm), hip joint centres 176 mm apart (Bell et al. 1990 regression), socket Ø 49 mm, acetabulum inclination 44° and anteversion 17°.
+- **Joints:** the sacroiliac joints are a 2.5 mm joint space whose iliac side is carved from the sacrum's own surface, so the auricular surfaces stay congruent; the cartilage layer (`SIJ_L`, `SIJ_R`) sits between them. The pubic symphysis is a fibrocartilaginous disc (`PUBIC_SYMPHYSIS`) between flat symphyseal surfaces. Both joint elements use the disc / cartilage palette and sit halfway between the bones they join.
+- **Rig:** the pelvis is the root. *Tilt*, *Hip hike* and *Turn* (pose.root, ±15°, ±10°, ±10°) rotate both hip bones and the sacrum together about the hip axis — one transform, applied once; the spine's own angles ride on top, so pelvic movement is never applied twice. Separate, much smaller relative movement at the pelvic joints: sacroiliac **nutation / counternutation** (sacrum, with the spine, against both hip bones about the transverse SI axis, ±2°; Sturesson 1989/2000) and **counter-rotation** of the hip bones (±0.5° each, single-leg-stance values; the symphysis shears ≤ 1.5 mm, Walheim & Selvik 1984). Inputs beyond these are clamped. Zero input returns the rest skeleton itself.
+- **Demonstrations:** *Pelvic tilt forward* and *Pelvic tilt back*: the pelvis tilts 10° and the lumbar spine compensates by the same angle, so T12 and everything above stay upright (exact).
+- **Attachment frames** (in every posed model and in `export-rig.js`): acetabulum centre and axis of each hip bone (future femurs), glenoid centre and normal of each scapula (future humeri), atlas top (future skull). No limb or skull geometry is built.
+- **Hyoid:** `HYOID`, U-shaped body with greater and lesser horns, at the level of C3 (the most common level in women), body ≈ 37 mm in front of C3. It has no bony joint; until the head and neck soft tissue exist it follows C3 as a stand-in.
+- **Approximations for review:** obturator foramen 58 × 29 mm (a little narrow); sacroiliac contact ≈ 11 cm² per side, limited by the approved sacrum's lateral surface (adult auricular surfaces ≈ 12–18 cm²); the pelvic-joint axis is a fixed transverse axis (real SI motion is helical and small); the hyoid's position will be revisited with the mandible and neck.
+
+| Command | Output |
+|---|---|
+| `node tools/pelvis-check.js [--json out.json]` | inventory of the trunk skeleton, hip-bone proportions, joint spaces, clearances, hyoid level, rig behaviour (root applied once, pelvic-joint limits, every demonstration, pelvic tilts, attachment frames, exact reset) |
+
 ## Pixel style
 
 One model, every view: each bone is a signed distance field in millimetres, projected orthographically. Light is fixed to the
@@ -112,7 +129,7 @@ thorax bones touch without a depth jump (clavicle on the manubrium, rib head on 
 | | outline | line | shade | mid | light | highlight |
 |---|---|---|---|---|---|---|
 | Bone | `#2b211b` | `#5c4a3b` | `#8e7860` | `#bca98a` | `#e0d4b8` | `#faf4e3` |
-| Disc, costal cartilage | (bone) | `#4b5157` | `#7b878a` | `#a7b2b0` | `#cdd6d1` | `#eef3ee` |
+| Disc, costal and joint cartilage | (bone) | `#4b5157` | `#7b878a` | `#a7b2b0` | `#cdd6d1` | `#eef3ee` |
 
 ## Code
 
@@ -123,7 +140,8 @@ thorax bones touch without a depth jump (clavicle on the manubrium, rib head on 
 | `src/spine-rig.js` | the rig: pose → segment angles → rigid vertebrae and deforming discs |
 | `src/thorax-core.js` | ribs, costal cartilages, sternum and clavicles: data, placement on the spine, shapes |
 | `src/shoulder-core.js` | both scapulae: reference data, shape, placement on the clavicle and rib cage, gliding surface |
-| `src/thorax-rig.js` | rib-cage response to spinal poses, shoulder girdle (clavicle + scapula) solver, skeleton demonstrations |
+| `src/pelvis-core.js` | both hip bones, sacroiliac joints, pubic symphysis and hyoid: reference data, shapes, placement on the sacrum, pelvic-joint ranges |
+| `src/thorax-rig.js` | the full skeleton rig: rib-cage response to spinal poses, shoulder girdle solver, pelvis root and pelvic joints, attachment frames, demonstrations |
 | `src/spine-render.js` | ray caster and the pixel-art pass |
 | `src/measure.js` | landmark measurements from the model |
 | `app/` | the lab's page (`shell.html`) and interface (`app.js`) |
@@ -134,7 +152,7 @@ thorax bones touch without a depth jump (clavicle on the manubrium, rib head on 
 | `node tools/build.js` | rebuilds `index.html` |
 | `node tools/render-views.js out 4` | the eight spine views as transparent PNGs in `out/` |
 | `node tools/validate.js out` | validation report: counts, curves, balance, lengths, contacts, view consistency |
-| `node tools/export-rig.js out/spine-rig.json` | element frames, motion segments, pivots, limits, coupling, demo poses, and the thorax (frames, joints, attachments, clavicle limits) |
+| `node tools/export-rig.js out/spine-rig.json` | element frames, motion segments, pivots, limits, coupling, demo poses, the thorax, shoulder girdle and pelvis (frames, joints, attachments, limits, attachment frames for the future limbs and skull) |
 
 ## Credits
 

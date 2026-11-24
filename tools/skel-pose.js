@@ -4,7 +4,7 @@ const C = require("../src/spine-core.js"), SR = require("../src/spine-rig.js"), 
 const [out, ss, demo, ...views] = process.argv.slice(2);
 fs.mkdirSync(out, { recursive: true });
 const sk = TR.buildSkeleton(), rig = TR.makeRig(sk), comps = sk.els.map(C.compile);
-const d = SR.demoPoses().find((x) => x.id === demo) || { pose: JSON.parse(demo) };
+const d = TR.demoPoses().find((x) => x.id === demo) || { pose: JSON.parse(demo) };
 const m = TR.posedModel(rig, comps, d.pose);
 for (const vid of views) {
   const v = [...R.VIEWS, { id: "top", yaw: 0, pitch: 90 }].find((x) => x.id === vid);

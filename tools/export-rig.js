@@ -53,4 +53,22 @@ out.shoulder = {
     glenoid: { centre: r1v(Cc.toWorld(e, e.glenoid.c)), normalWorld: e.R.map((row) => r3(row[0] * e.glenoid.n[0] + row[1] * e.glenoid.n[1] + row[2] * e.glenoid.n[2])) }, restAngles: SRig.shoulder[e.side].rest })),
   demos: TR.demoPoses().filter((d) => ["shrug", "shoulders-back", "reach-forward", "upward-rotation"].includes(d.id)),
 };
+// pelvis and hyoid: hip bones on the root, pelvic joints, attachment frames for the parts not built yet
+const Pv = require("../src/pelvis-core.js");
+const fr = (a) => Object.fromEntries(Object.entries(a).map(([k, v]) => [k, Array.isArray(v) ? (typeof v[0] === "number" ? v.map(r3) : v) : v]));
+out.pelvis = {
+  about: "Two hip bones (ilium, ischium, pubis fused) around the approved sacrum and coccyx. Local frame of a hip bone: origin = acetabulum centre (future hip joint), world axes; the right bone mirrors the left.",
+  hierarchy: { root: "pelvis = pose.root { tilt, obliquity, rotation }: one rigid transform about the hip axis applied once to both hip bones and to the sacrum (and so to the whole spine above)",
+    sacroiliac: "pose.root.nutation: sacrum (with the spine) turns relative to both hip bones about the transverse SI axis; ± " + Pv.ROM.nutation + "°",
+    innominate: "pose.root.counter: hip bones rotate in opposite directions about the same axis (+ = left posterior); ± " + Pv.ROM.counter + "° each; the symphysis shears",
+    jointElements: "SIJ_L / SIJ_R (articular cartilage) and PUBIC_SYMPHYSIS (interpubic disc) sit halfway between the bones they join",
+    hyoid: "no bony joint; follows C3 until the head and neck soft tissue exist" },
+  rom: Pv.ROM, dimensions: { hipJointCentre: Pv.PELVIS.hjc, socketRadius: Pv.PELVIS.socketR, acetabulumInclinationDeg: Pv.PELVIS.inclination, acetabulumAnteversionDeg: Pv.PELVIS.anteversion,
+    sacroiliacGap: Pv.PELVIS.siGap, interpubicGap: 2 * Pv.PELVIS.symphysisX },
+  elements: sk.pelvis.els.map((e) => ({ id: e.id, name: e.name, kind: e.kind, side: e.side, restOrigin: r1v(e.o), between: e.between, follows: e.follows,
+    landmarksWorld: e.landmarks ? Object.fromEntries(Object.entries(e.landmarks).map(([k, p]) => [k, r1v(p)])) : undefined,
+    acetabulum: e.acetabulum ? { centre: r1v(e.acetabulum.c), axis: e.acetabulum.n.map(r3), radius: e.acetabulum.radius } : undefined })),
+  attachmentFrames: Object.fromEntries(Object.entries(SRig.attachRest).map(([k, v]) => [k, fr(v)])),
+  demos: TR.demoPoses().filter((d) => d.id.startsWith("pelvic")),
+};
 const f = process.argv[2] || "spine-rig.json"; fs.writeFileSync(f, JSON.stringify(out, null, 1)); console.log("wrote", f, elements.length, "spine elements,", segments.length, "segments,", out.thorax.elements.length, "thorax elements");

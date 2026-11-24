@@ -63,7 +63,9 @@ h1 { font-family: var(--f-display); font-size: 19px; font-weight: 600; margin: 0
 .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); font-weight: 600; }
 .seg button:disabled { opacity: 0.4; cursor: default; background: transparent; color: var(--muted); font-weight: 400; }
 .seg.small button { min-height: 30px; padding: 0 9px; font-size: 12px; }
-#region { display: grid; grid-template-columns: repeat(4, 1fr); }
+#region { display: grid; grid-template-columns: repeat(3, 1fr); }
+#region button:nth-child(4) { border-left: 0; }
+#region button:nth-child(n+4) { border-top: 1px solid var(--line2); }
 #region button { padding: 0 4px; }
 .orient { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; }
 .orient svg { flex: none; }
@@ -201,13 +203,6 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
             <div>
               <div class="seg small" id="region" role="group" aria-label="Body region"></div>
               <div id="region-controls"></div>
-              <details class="inner adv" id="pelvis">
-                <summary>Advanced: pelvis (sacrum)</summary>
-                <div>
-                  <label class="check" for="sacrum-fixed"><input type="checkbox" id="sacrum-fixed"> Keep the sacrum fixed</label>
-                  <div id="root-controls"></div>
-                </div>
-              </details>
             </div>
           </details>
         </div>
@@ -219,6 +214,8 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
           <label class="check" for="layer-spine"><input type="checkbox" id="layer-spine"> Spine</label>
           <label class="check" for="layer-ribcage"><input type="checkbox" id="layer-ribcage"> Rib cage</label>
           <label class="check" for="layer-clavicles"><input type="checkbox" id="layer-clavicles"> Shoulder girdle (clavicles, scapulae)</label>
+          <label class="check" for="layer-pelvis"><input type="checkbox" id="layer-pelvis"> Pelvis (hip bones, sacroiliac joints, symphysis)</label>
+          <label class="check" for="layer-hyoid"><input type="checkbox" id="layer-hyoid"> Hyoid</label>
           <label class="check" for="labels"><input type="checkbox" id="labels"> Anatomical labels</label>
           <label class="check" for="guides"><input type="checkbox" id="guides"> Centre guides</label>
           <div class="sub">Diagnostic colouring</div>
@@ -266,6 +263,8 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
           <dl class="kv" id="ribcage"></dl>
           <div class="sub">Shoulder girdle (left / right)</div>
           <dl class="kv" id="girdle"></dl>
+          <div class="sub">Pelvis</div>
+          <dl class="kv" id="pelvis-info"></dl>
           <details class="inner adv"><summary>Segment angles</summary><div><div id="seg-table"></div></div></details>
           <div class="sub">How movement works</div>
           <ul class="notes">
@@ -274,7 +273,10 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
             <li>Ribs move with their vertebrae and may turn up to 10° at their costovertebral joints; the sternum settles where the cartilages are disturbed least; cartilages bend and keep their length.</li>
             <li>Clavicles hang from the manubrium (sternoclavicular joint), never from the spine. Each scapula hangs from its clavicle at the acromioclavicular joint and glides over the rib cage at a soft-tissue distance; it has no bony joint with the ribs or spine.</li>
             <li>Shoulder controls: raise / lower and forward / back move the clavicle (85 % of sternoclavicular ranges); upward rotation turns the scapula (85 % of the isolated, arm-free range). The clavicle's axial rotation and the scapula's tilt and internal rotation are solved so the scapula stays on the rib cage. One envelope per side.</li>
-            <li>The sacrum is fixed by default; the pelvis controls rotate it about the hip axis.</li>
+            <li>The pelvis is the root: tilt, hip hike and turn move both hip bones and the sacrum together about the hip axis, once; the spine's own angles ride on top.</li>
+            <li>Pelvic joints move only a little and separately from the whole pelvis: the sacrum may nod ±2° against both hip bones (sacroiliac nutation) and the hip bones may counter-rotate ±0.5° each, shearing the symphysis by up to ≈ 1.5 mm.</li>
+            <li>The hyoid has no bony joint; until the head and neck soft tissue exist it follows C3.</li>
+            <li>Attachment frames wait at both acetabula (femurs), both glenoids (humeri) and the atlas (skull); none of those bones is built.</li>
           </ul>
           <div class="sub">Model</div>
           <dl class="kv" id="model-info"></dl>
@@ -300,6 +302,9 @@ select { background: var(--raise); border: 1px solid var(--line2); border-radius
 </script>
 <script id="shoulder-src">
 /*SHOULDER*/
+</script>
+<script id="pelvis-src">
+/*PELVIS*/
 </script>
 <script id="thorax-rig-src">
 /*THORAXRIG*/

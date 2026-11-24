@@ -25,8 +25,11 @@ function cast(model, view, onProgress, only) {
   const Rv = rotView(view.yaw, view.pitch || 0);
   const Z0 = 3000, e = 0.1, jobs = [];
   let U0 = 1e9, U1 = -1e9, V0 = 1e9, V1 = -1e9;
-  model.els.forEach((el, k) => {
-    if (only && !only.includes(k)) return;
+  // `only`: element indices, or [index, from, to] to cast just a horizontal band (fractions of the element's rows), so a
+  // heavy bone can be shared between workers
+  const sel = only ? only.map((o) => (Array.isArray(o) ? o : [o, 0, 1])) : model.els.map((_, k) => [k, 0, 1]);
+  sel.forEach(([k, bandA, bandB]) => {
+    const el = model.els[k]; if (!el) return;
     const comp = model.comps[k], b = comp.box, M = mul(Rv, el.R || rotX(el.psi));
     const d0 = [el.o[0] - view.pivot[0], el.o[1] - view.pivot[1], el.o[2] - view.pivot[2]];
     const Ov = [0, 1, 2].map((i) => Rv[i][0] * d0[0] + Rv[i][1] * d0[1] + Rv[i][2] * d0[2]);
@@ -37,6 +40,7 @@ function cast(model, view, onProgress, only) {
       i0 = Math.min(i0, si); i1 = Math.max(i1, si); j0 = Math.min(j0, sj); j1 = Math.max(j1, sj);
     }
     i0 = Math.max(0, Math.floor(i0)); i1 = Math.min(SW - 1, Math.ceil(i1)); j0 = Math.max(0, Math.floor(j0)); j1 = Math.min(SH - 1, Math.ceil(j1));
+    if (bandA > 0 || bandB < 1) { const nj = j1 - j0 + 1, a = j0 + Math.floor(nj * bandA), z = j0 + Math.floor(nj * bandB) - 1; j0 = a; j1 = z; }
     if (i0 > i1 || j0 > j1) return;
     jobs.push({ k, el, comp, M, Ov, i0, i1, j0, j1 });
     U0 = Math.min(U0, i0); U1 = Math.max(U1, i1); V0 = Math.min(V0, j0); V1 = Math.max(V1, j1);
@@ -195,9 +199,9 @@ function stylise(g, model, st0) {
   }
   // separate bones that touch without a depth jump (clavicle on the manubrium, rib head on its vertebra): a joint line,
   // drawn on the farther of the two. Applies to skeletal elements added after the spine; spine-only pairs are unchanged.
-  const THX = { rib: 1, sternum: 1, clavicle: 1, scapula: 1 };
+  const THX = { rib: 1, sternum: 1, clavicle: 1, scapula: 1, hip: 1, hyoid: 1 }, SOFT = { cartilage: 1, disc: 1, joint: 1 };
   const joint = (p, q) => { const a = model.els[objOf[p] - 1], b = model.els[objOf[q] - 1];
-    return a && b && a !== b && (THX[a.kind] || THX[b.kind]) && a.kind !== "cartilage" && b.kind !== "cartilage" && a.kind !== "disc" && b.kind !== "disc" && depth[q] <= depth[p]; };
+    return a && b && a !== b && (THX[a.kind] || THX[b.kind]) && !SOFT[a.kind] && !SOFT[b.kind] && depth[q] <= depth[p]; };
   let lab = new Uint8Array(n);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
     const p = y * W + x; if (!cover[p]) continue;
@@ -237,7 +241,7 @@ function paint(st, model, palettes = PALETTES) {
   for (let p = 0; p < W * H; p++) {
     const v = lab[p]; if (!v) continue;
     const el = model.els[obj[p] - 1];
-    const pal = el && (el.kind === "disc" || el.kind === "cartilage") ? pals.disc : pals.bone;   // cartilage tissue: disc ramp
+    const pal = el && (el.kind === "disc" || el.kind === "cartilage" || el.kind === "joint") ? pals.disc : pals.bone;   // cartilage tissue: disc ramp
     const c = v === 1 ? pals.bone[0] : pal[v - 1];
     rgba[p * 4] = c[0]; rgba[p * 4 + 1] = c[1]; rgba[p * 4 + 2] = c[2]; rgba[p * 4 + 3] = 255;
   }
